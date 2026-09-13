@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime
@@ -20,7 +20,7 @@ from ...schemas.schemas import (
     PaymentOut,
 )
 from ...services.ticket_service import next_ticket_number
-from ...services.receipt_service import build_receipt, render_receipt_text
+from ...services.receipt_service import build_receipt, build_payment_receipt, render_receipt_text
 
 router = APIRouter()
 
@@ -172,14 +172,25 @@ def void_order(order_id: UUID, payload: VoidCreate, db: Session = Depends(get_db
 
 
 @router.get("/{order_id}/ticket")
-def get_ticket(order_id: UUID, format: str = "json", db: Session = Depends(get_db)):
+def get_ticket(
+    order_id: UUID,
+    format: str = "json",
+    payment_id: Optional[UUID] = None,
+    db: Session = Depends(get_db),
+):
     """Retorna el tiquet de la comanda (capçalera + línies agrupades + total).
 
+    Si es passa `payment_id`, retorna el tiquet de pagament (amb el mètode,
+    habitació/convidat/motiu i requadre de signatura si cal).
     `format=json` retorna el tiquet estructurat; `format=text` el renderitza en
     text pla per a impressora tèrmica de 80 mm.
     """
     try:
-        receipt = build_receipt(db, order_id)
+        receipt = (
+            build_payment_receipt(db, payment_id)
+            if payment_id
+            else build_receipt(db, order_id)
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
