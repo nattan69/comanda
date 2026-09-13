@@ -40,8 +40,14 @@ def envia_cierre_a_compta(
 ) -> dict:
     """Envia el tancament de caixa diari (Z) a Compta com a assentament de CONTROL.
 
-    Assentament EQUILIBRAT: el que ha entrat a la caixa/TPV (per mètode) a
-    l'HAVER, i els ingressos + IVA repercutit al DEURE. El `house` queda fora.
+    Assentament EQUILIBRAT amb el compte pont (5730) SALDAT dins el mateix
+    assentament:
+    - DEURE: cobraments per mètode — cash→570 (caixa), card/room_charge→5730
+      (pont), bizum→5720 (banc).
+    - SALDAMENT del pont: card→5720 (banc) i room_charge→4300 (client), amb la
+      contrapartida al 5730 perquè quedi a zero.
+    - HAVER: ingressos 7020 + IVA repercutit 4771.
+    El `house` queda fora (no es declara).
     """
     from ..config import settings
 
@@ -54,9 +60,11 @@ def envia_cierre_a_compta(
     for v in summary.get("vat_breakdown") or []:
         vat_total += Decimal(str(v.get("tax") or 0))
 
-    # Deure (debit): cobraments per mètode (declarables, house ja exclòs al summary).
-    debit_total = Decimal("0")
     lines = []
+
+    # 1) Deure: cobraments per mètode (house exclòs).
+    card_total = Decimal("0")
+    room_total = Decimal("0")
     for method, amount in payments.items():
         m = (method or "").strip().lower()
         if m in ("house", "invitacio", "invitación"):
@@ -64,7 +72,10 @@ def envia_cierre_a_compta(
         amt = Decimal(str(amount or 0))
         if amt <= 0:
             continue
-        debit_total += amt
+        if m in ("card", "targeta", "tarjeta"):
+            card_total += amt
+        elif m in ("room_charge", "room_charge_extra"):
+            room_total += amt
         lines.append({
             "account": _METHOD_ACCOUNT.get(m, "5730"),
             "debit": str(amt),
@@ -72,35 +83,31 @@ def envia_cierre_a_compta(
             "concept": f"Cobraments {m}",
         })
 
-    # Haver: ingressos (base) + IVA repercutit.
-    credit_total = Decimal("0")
-    if net_sales > 0:
-        credit_total += net_sales
-        lines.append({
-            "account": "7020",
-            "debit": "0",
-            "credit": str(net_sales),
-            "concept": "Ingressos TPV (base)",
-        })
-    if vat_total > 0:
-        credit_total += vat_total
-        lines.append({
-            "account": "4771",
-            "debit": "0",
-            "credit": str(vat_total),
-            "concept": "IVA repercutit",
-        })
+    # 2) Saldament del pont 5730: targetes → banc (5720), room_charge → client (4300).
+    if card_total > 0:
+        lines.append({"account": "5720", "debit": str(card_total), "credit": "0", "concept": "Liquidació targetes (pont → banc)"})
+        lines.append({"account": "5730", "debit": "0", "credit": str(card_total), "concept": "Saldament pont TPV (targetes)"})
+    if room_total > 0:
+        lines.append({"account": "4300", "debit": str(room_total), "credit": "0", "concept": "Càrrec a habitació (pont → client)"})
+        lines.append({"account": "5730", "debit": "0", "credit": str(room_total), "concept": "Saldament pont TPV (room charge)"})
 
-    # Si no quadra (p. ex. pel room_charge que ja comptabilitza Estada), equilibra
-    # amb una línia de pont perquè l'assentament sempre surti equilibrat.
+    # 3) Haver: ingressos (base) + IVA repercutit.
+    if net_sales > 0:
+        lines.append({"account": "7020", "debit": "0", "credit": str(net_sales), "concept": "Ingressos TPV (base)"})
+    if vat_total > 0:
+        lines.append({"account": "4771", "debit": "0", "credit": str(vat_total), "concept": "IVA repercutit"})
+
+    # 4) Ajust per arrodoniments (si cal), a un compte dedicat — MAI al pont 5730,
+    # que ha de quedar saldat.
+    debit_total = sum(Decimal(l["debit"]) for l in lines)
+    credit_total = sum(Decimal(l["credit"]) for l in lines)
     diff = debit_total - credit_total
-    if diff != 0:
-        lines.append({
-            "account": "5730",
-            "debit": str(max(Decimal("0"), -diff)),
-            "credit": str(max(Decimal("0"), diff)),
-            "concept": "Ajust de pont TPV",
-        })
+    if diff > 0:
+        # falta haver: ho abonem com a ingrés d'arrodoniment
+        lines.append({"account": "778", "debit": "0", "credit": str(diff), "concept": "Ajust arrodoniment"})
+    elif diff < 0:
+        # falta deure: ho carreguem com a despesa d'arrodoniment
+        lines.append({"account": "669", "debit": str(-diff), "credit": "0", "concept": "Ajust arrodoniment"})
 
     payload = {
         "external_id": external_id,
