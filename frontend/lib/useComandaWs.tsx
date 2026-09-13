@@ -32,7 +32,7 @@ type Handlers = {
 export function useComandaWs(handlers: Handlers) {
   const [status, setStatus] = useState<'connectant' | 'viu' | 'caigut'>('connectant');
   const wsRef = useRef<WebSocket | null>(null);
-  const retryRef = useRef(0);
+  const retryRef = useRef<number | null>(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // handlers a refs per no re-connectar en cada render
   const h = useRef(handlers);
