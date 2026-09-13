@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
@@ -9,6 +10,7 @@ from ...db import get_db
 from ...models.models import Order, OrderItem, MenuItem, Void
 from ...schemas.schemas import OrderCreate, OrderOut, OrderItemCreate, OrderItemOut, VoidCreate, VoidOut
 from ...services.ticket_service import next_ticket_number
+from ...services.receipt_service import build_receipt, render_receipt_text
 
 router = APIRouter()
 
@@ -157,3 +159,20 @@ def void_order(order_id: UUID, payload: VoidCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(void)
     return void
+
+
+@router.get("/{order_id}/ticket")
+def get_ticket(order_id: UUID, format: str = "json", db: Session = Depends(get_db)):
+    """Retorna el tiquet de la comanda (capçalera + línies agrupades + total).
+
+    `format=json` retorna el tiquet estructurat; `format=text` el renderitza en
+    text pla per a impressora tèrmica de 80 mm.
+    """
+    try:
+        receipt = build_receipt(db, order_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if format == "text":
+        return PlainTextResponse(render_receipt_text(receipt))
+    return receipt
