@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { apiCarta, MenuItem, Family, IncomeCategory, Center } from '@/lib/api';
+import FitxaArticle from '@/components/FitxaArticle';
 
 /**
  * Gestió de la CARTA — articles amb 3 nivells (decisió Tomeu 13/09):
@@ -21,6 +22,8 @@ export default function CartaPage() {
   const [filtre, setFiltre] = useState<Filtre>({ familia: '', ingres: '', centre: '', grup: 'cap' });
   const [form, setForm] = useState({ name: '', price: '', vat: '10', family_id: '', income_category_id: '', center_id: '' });
   const [novaFamilia, setNovaFamilia] = useState('');
+  const [fitxa, setFitxa] = useState<MenuItem | null>(null);
+  const [sort, setSort] = useState<{ col: string; dir: 'asc' | 'desc' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -41,11 +44,32 @@ export default function CartaPage() {
 
   const esPensio = (n: string) => PENSIONS.some((p) => n.toLowerCase().includes(p));
 
-  const filtrats = useMemo(() => items.filter((it) =>
-    (!filtre.familia || it.family_id === filtre.familia) &&
-    (!filtre.ingres || it.income_category_id === filtre.ingres) &&
-    (!filtre.centre || (it as MenuItem & { center_id?: string }).center_id === filtre.centre)
-  ), [items, filtre]);
+  const filtrats = useMemo(() => {
+    const l = items.filter((it) =>
+      (!filtre.familia || it.family_id === filtre.familia) &&
+      (!filtre.ingres || it.income_category_id === filtre.ingres) &&
+      (!filtre.centre || (it as MenuItem & { center_id?: string }).center_id === filtre.centre));
+    if (!sort) return l;
+    const nom = (ll: { id: string; name: string }[], id?: string | null) =>
+      ll.find((x) => x.id === id)?.name || '';
+    const val = (it: MenuItem): string | number => {
+      switch (sort.col) {
+        case 'name': return it.name.toLowerCase();
+        case 'price': return it.price ?? 0;
+        case 'vat': return (it as MenuItem & { vat_rate?: number }).vat_rate ?? 0;
+        case 'family': return nom(families, it.family_id);
+        case 'ingres': return nom(ingressos, it.income_category_id);
+        case 'centre': return nom(centres, (it as MenuItem & { center_id?: string }).center_id);
+        default: return it.name.toLowerCase();
+      }
+    };
+    return [...l].sort((a, b) => {
+      const va = val(a), vb = val(b);
+      const cmp = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb : String(va).localeCompare(String(vb), 'ca');
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [items, filtre, sort, families, ingressos, centres]);
 
   const agrupats = useMemo(() => {
     if (filtre.grup === 'cap') return null;
@@ -82,6 +106,16 @@ export default function CartaPage() {
 
   const nom = (llista: { id: string; name: string }[], id?: string | null) =>
     llista.find((x) => x.id === id)?.name || '—';
+
+  const ordena = (col: string) =>
+    setSort((s) => (s?.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
+
+  const cap = (col: string, label: string) => (
+    <th className={col === 'price' ? 'text-right' : ''} style={{ cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => ordena(col)} title="Ordenar">
+      {label}{sort?.col === col && <span className="ml-1 text-brand-gold">{sort.dir === 'asc' ? '▲' : '▼'}</span>}
+    </th>
+  );
 
   const select = (value: string, onChange: (v: string) => void, opcions: { id: string; name: string }[], label: string) => (
     <select value={value} onChange={(e) => onChange(e.target.value)}
@@ -138,37 +172,48 @@ export default function CartaPage() {
         agrupats.map(([grup, llista]) => (
           <div key={grup}>
             <h2 className="text-lg font-bold text-brand-gold mt-4 mb-2">{grup} <span className="text-xs text-gray-500">({llista.length})</span></h2>
-            <Taula items={llista} families={families} ingressos={ingressos} centres={centres} nom={nom} esPensio={esPensio} />
+            <Taula items={llista} families={families} ingressos={ingressos} centres={centres} nom={nom} esPensio={esPensio}
+              cap={cap} onDbl={setFitxa} sort={sort} />
           </div>
         ))
       ) : (
-        <Taula items={filtrats} families={families} ingressos={ingressos} centres={centres} nom={nom} esPensio={esPensio} />
+        <Taula items={filtrats} families={families} ingressos={ingressos} centres={centres} nom={nom} esPensio={esPensio}
+          cap={cap} onDbl={setFitxa} sort={sort} />
+      )}
+
+      {fitxa && (
+        <FitxaArticle item={fitxa} families={families} ingressos={ingressos} centres={centres}
+          onClose={() => setFitxa(null)} onSaved={carrega} />
       )}
     </div>
   );
 }
 
-function Taula({ items, families, ingressos, centres, nom, esPensio }: {
+function Taula({ items, families, ingressos, centres, nom, esPensio, cap, onDbl, sort }: {
   items: MenuItem[]; families: Family[]; ingressos: IncomeCategory[]; centres: Center[];
   nom: (l: { id: string; name: string }[], id?: string | null) => string;
   esPensio: (n: string) => boolean;
+  cap: (col: string, label: string) => React.ReactNode;
+  onDbl: (it: MenuItem) => void;
+  sort: { col: string; dir: 'asc' | 'desc' } | null;
 }) {
   return (
     <table className="w-full text-sm bg-brand-dark border border-brand-gold/20 rounded-xl overflow-hidden">
       <thead>
         <tr className="text-left text-gray-400 border-b border-brand-gold/20">
-          <th className="p-3">Article</th>
-          <th className="text-right">Preu</th>
-          <th>IVA</th>
-          <th>Família</th>
-          <th>Cat. ingrés</th>
-          <th>Departament</th>
+          {cap('name', 'Article')}
+          {cap('price', 'Preu')}
+          {cap('vat', 'IVA')}
+          {cap('family', 'Família')}
+          {cap('ingres', 'Cat. ingrés')}
+          {cap('centre', 'Departament')}
           <th />
         </tr>
       </thead>
       <tbody>
         {items.map((it) => (
-          <tr key={it.id} className="border-b border-white/5 hover:bg-white/5">
+          <tr key={it.id} onDoubleClick={() => onDbl(it)} title="Doble clic: editar"
+            className="border-b border-white/5 hover:bg-white/5 cursor-pointer">
             <td className="p-3">
               {it.name}
               {esPensio(it.name) && <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-brand-gold/20 text-brand-gold">pensió</span>}
