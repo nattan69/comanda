@@ -2,12 +2,11 @@
 Servei de tancament del dia del TPV (informe Z).
 
 Calcula la "Z" completa del dia: vendes brutes, descomptes, pagaments per
-mètode (efectiu, targeta, bizum, invitacions/house, càrrecs a habitació),
-càrrecs a habitacions, anul·lacions autoritzades per un cap, i el desglossament
-d'IVA. Ho registra en una fila `DayClosure` idempotent per data de negoci.
+mètode (efectiu, targeta, bizum, càrrecs a habitació), càrrecs a habitacions,
+anul·lacions autoritzades per un cap, i el desglossament d'IVA.
 
-És el volcat diari que Estada (PMS) consumirà per al quadrament de caixa del
-seu night audit.
+Les INVITACIONS (`house`) NO formen part de la venda: es llisten A PART (clau
+`house`), fora del total i del desglossament d'IVA, per no declarar-ne l'IVA.
 """
 
 from datetime import date, datetime, time, timedelta, timezone
@@ -15,6 +14,9 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..models.models import DayClosure, Order, OrderItem, Payment, Void
+
+# Mètodes de pagament que són "venda real" (declarables). `house` (invitació) va a part.
+NON_SALE_METHODS = {"house"}
 
 
 def _day_bounds(closure_date: date) -> tuple[datetime, datetime]:
@@ -47,16 +49,32 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         )
         .all()
     )
-    total_sales = sum((Decimal(str(o.total_amount or 0)) for o in orders), Decimal("0"))
-    discounts_total = sum((Decimal(str(o.discount_amount or 0)) for o in orders), Decimal("0"))
-    orders_count = len(orders)
+
+    # Identificar les comandes d'invitació (pagades amb `house`) — NO són venda.
+    house_order_ids = {
+        p.order_id
+        for p in db.query(Payment).filter(
+            Payment.method == "house",
+            Payment.status == "completed",
+            Payment.paid_at >= start,
+            Payment.paid_at < end,
+        ).all()
+    }
+
+    declarable_orders = [o for o in orders if o.id not in house_order_ids]
+    house_orders = [o for o in orders if o.id in house_order_ids]
+
+    total_sales = sum((Decimal(str(o.total_amount or 0)) for o in declarable_orders), Decimal("0"))
+    house_total = sum((Decimal(str(o.total_amount or 0)) for o in house_orders), Decimal("0"))
+    discounts_total = sum((Decimal(str(o.discount_amount or 0)) for o in declarable_orders), Decimal("0"))
+    orders_count = len(declarable_orders)
 
     orders_by_type: dict[str, int] = {}
-    for o in orders:
+    for o in declarable_orders:
         t = (o.order_type or "dine_in").strip() or "dine_in"
         orders_by_type[t] = orders_by_type.get(t, 0) + 1
 
-    # --- Pagaments del dia per mètode (inclou invitacions i room charges) ---
+    # --- Pagaments del dia per mètode (SENSE house, que va a part) ---
     payments = (
         db.query(Payment)
         .filter(
@@ -70,13 +88,15 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
     payments_by_method: dict[str, str] = {}
     for p in payments:
         method = (p.method or "other").strip().lower() or "other"
+        if method in NON_SALE_METHODS:
+            continue  # house es llista a part
         payments_by_method[method] = str(
             Decimal(payments_by_method.get(method, "0")) + Decimal(str(p.amount or 0))
         )
 
     # --- Càrrecs a habitacions (room charges) ---
     room_charges: dict[str, dict] = {}
-    for o in orders:
+    for o in declarable_orders:
         if o.room_number:
             rn = o.room_number.strip()
             entry = room_charges.setdefault(rn, {"room_number": rn, "total": Decimal("0"), "orders": 0})
@@ -106,8 +126,8 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
     ]
     voids_total = sum((Decimal(v["amount"]) for v in voids_list), Decimal("0"))
 
-    # --- Desglossament d'IVA per tipus ---
-    order_ids = [o.id for o in orders]
+    # --- Desglossament d'IVA per tipus (només vendes declarables) ---
+    order_ids = [o.id for o in declarable_orders]
     vat_map: dict[str, Decimal] = {}
     base_map: dict[str, Decimal] = {}
     if order_ids:
@@ -141,6 +161,10 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
             "payments_by_method": payments_by_method,
             "payments_total": str(sum(Decimal(v) for v in payments_by_method.values())),
             "orders_by_type": orders_by_type,
+            "house": {
+                "total": str(house_total),
+                "orders": len(house_orders),
+            },
             "room_charges": room_charges_list,
             "room_charges_total": str(room_charges_total),
             "voids": {
