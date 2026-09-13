@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import PlainTextResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
@@ -7,8 +8,17 @@ from decimal import Decimal
 from datetime import datetime
 
 from ...db import get_db
-from ...models.models import Order, OrderItem, MenuItem, Void
-from ...schemas.schemas import OrderCreate, OrderOut, OrderItemCreate, OrderItemOut, VoidCreate, VoidOut
+from ...models.models import Order, OrderItem, MenuItem, Void, Payment
+from ...schemas.schemas import (
+    OrderCreate,
+    OrderOut,
+    OrderItemCreate,
+    OrderItemOut,
+    VoidCreate,
+    VoidOut,
+    PaymentRequest,
+    PaymentOut,
+)
 from ...services.ticket_service import next_ticket_number
 from ...services.receipt_service import build_receipt, render_receipt_text
 
@@ -176,3 +186,51 @@ def get_ticket(order_id: UUID, format: str = "json", db: Session = Depends(get_d
     if format == "text":
         return PlainTextResponse(render_receipt_text(receipt))
     return receipt
+
+
+@router.post("/{order_id}/pay", response_model=PaymentOut, status_code=status.HTTP_201_CREATED)
+def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get_db)):
+    """Registra un pagament de la comanda i, si cobreix el total, la tanca.
+
+    Mètodes: `cash` (efectiu), `card` (targeta/SoftPOS), `bizum`, `split`,
+    `room_charge` (càrrec a habitació) i `house` (invitació). Les invitacions
+    tenen seqüència de tiquet pròpia (`INV`), la resta comparteixen `TICKET`.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Comanda no trobada")
+
+    method = (payload.method or "").strip().lower()
+    if method not in ("cash", "card", "bizum", "split", "room_charge", "house"):
+        raise HTTPException(status_code=400, detail="Mètode de pagament invàlid")
+
+    seq = "INV" if method == "house" else "TICKET"
+    _, ticket_code = next_ticket_number(db, seq)
+
+    payment = Payment(
+        order_id=order_id,
+        method=method,
+        amount=Decimal(str(payload.amount)),
+        status="completed",
+        ticket_code=ticket_code,
+        guest_name=payload.guest_name,
+        room_number=payload.room_number,
+        invited_by=payload.invited_by,
+        reason=payload.reason,
+    )
+    db.add(payment)
+
+    # Tancar la comanda si el pagament (o la suma dels pagaments) cobreix el total.
+    paid_total = (
+        db.query(func.sum(Payment.amount))
+        .filter(Payment.order_id == order_id, Payment.status == "completed")
+        .scalar()
+    )
+    paid_total = Decimal(str(paid_total or 0)) + Decimal(str(payload.amount))
+    if paid_total >= Decimal(str(order.total_amount or 0)):
+        order.status = "paid"
+        order.closed_at = datetime.now()
+
+    db.commit()
+    db.refresh(payment)
+    return payment

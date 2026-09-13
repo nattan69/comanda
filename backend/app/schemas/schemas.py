@@ -221,12 +221,27 @@ class PaymentCreate(BaseModel):
     order_id: UUID
     method: str
     amount: float
+    guest_name: Optional[str] = None
+    room_number: Optional[str] = None
+    invited_by: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class PaymentRequest(BaseModel):
+    """Body de pagament via endpoint (l'order_id ve de la URL)."""
+    method: str  # cash, card, bizum, room_charge, house
+    amount: float
+    guest_name: Optional[str] = None  # room_charge
+    room_number: Optional[str] = None  # room_charge
+    invited_by: Optional[str] = None  # house
+    reason: Optional[str] = None  # house
 
 
 class PaymentOut(PaymentCreate):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     status: str
+    ticket_code: Optional[str] = None
     paid_at: Optional[datetime] = None
 
 

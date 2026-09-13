@@ -182,8 +182,14 @@ class Payment(Base):
     method = Column(String, nullable=False)  # cash, card, bizum, split, house, room_charge
     amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String, default='completed')  # pending, completed, refunded, failed
-    # Codi del tiquet de pagament (numeració per tipus: EF/TG/RC/INV-AAAA-NNNN).
+    # Codi del tiquet de pagament (seqüència TICKET per EF/TG/RC, INV per house).
     ticket_code = Column(String)
+    # Room charge (càrrec a habitació): dades del client i de l'habitació.
+    guest_name = Column(String)
+    room_number = Column(String)
+    # Invitació (house): qui convida i per quin motiu.
+    invited_by = Column(String)  # Direcció, Central, Comercial, Att. clients, Personal...
+    reason = Column(String)  # motiu de la invitació (o de l'anul·lació)
     paid_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
