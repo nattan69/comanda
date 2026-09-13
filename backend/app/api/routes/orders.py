@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -25,6 +25,7 @@ from ...services.receipt_service import (
     build_payment_receipt,
     build_void_receipt,
     render_receipt_text,
+    render_receipt_escpos,
 )
 
 router = APIRouter()
@@ -206,6 +207,8 @@ def get_ticket(
 
     if format == "text":
         return PlainTextResponse(render_receipt_text(receipt))
+    if format == "escpos":
+        return Response(content=render_receipt_escpos(receipt), media_type="application/octet-stream")
     return receipt
 
 
@@ -224,6 +227,8 @@ def get_void_ticket(
 
     if format == "text":
         return PlainTextResponse(render_receipt_text(receipt))
+    if format == "escpos":
+        return Response(content=render_receipt_escpos(receipt), media_type="application/octet-stream")
     return receipt
 
 

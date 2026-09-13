@@ -262,3 +262,44 @@ def render_receipt_text(receipt: dict) -> str:
     out.append(_center("Gràcies per la seva visita"))
 
     return "\n".join(out)
+
+
+# ============================================================
+# ESC/POS — impressió real per a impressora tèrmica
+# ============================================================
+
+def _encode_escpos(text: str) -> bytes:
+    """Codifica una línia per a ESC/POS.
+
+    Les impressores tèrmiques no entenen UTF-8 pels accents: es fa servir
+    CP858 (CP850 + símbol €), que cobreix els caràcters catalans (à, è, í, ò,
+    ú, ç, l·l) i l'euro. Els caràcters que no hi caben es substitueixen.
+    """
+    return text.encode("cp858", errors="replace")
+
+
+def render_receipt_escpos(receipt: dict) -> bytes:
+    """Genera els bytes ESC/POS del tiquet per a impressora tèrmica de 80 mm.
+
+    Aplica negreta a les línies importants (total, marca ANUL·LAT/CÒPIA),
+    codifica en CP858 i tanca amb un tall de paper automàtic.
+    """
+    text = render_receipt_text(receipt)
+    out = bytearray()
+    out += b"\x1b@"  # ESC @ → inicialitza la impressora
+
+    for line in text.split("\n"):
+        stripped = line.strip()
+        is_bold = (
+            stripped.startswith("TOTAL")
+            or "ANUL·LAT" in stripped
+            or "CÒPIA" in stripped
+        )
+        out += b"\x1b\x45\x01" if is_bold else b"\x1b\x45\x00"  # ESC E n → negreta
+        out += _encode_escpos(line)
+        out += b"\n"
+
+    out += b"\x1b\x45\x00"        # negreta OFF
+    out += b"\n" * 4               # feed final (espai abans del tall)
+    out += b"\x1d\x56\x42\x00"    # GS V → tall parcial de paper
+    return bytes(out)
