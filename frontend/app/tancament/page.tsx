@@ -100,7 +100,7 @@ export default function TancamentPage() {
                   <td className="text-right font-mono">{fmt(c.totals?.total)}</td>
                 </tr>
               ))}
-            </thead>
+            </tbody>
           </table>
         )}
       </div>

@@ -42,7 +42,7 @@ export async function printEscpos(bytes: ArrayBuffer): Promise<'gateway' | 'webu
   }
 
   // WebUSB — cal haver demanat el dispositiu abans (requestPrinter())
-  const nav = navigator as Navigator & { usb?: USB };
+  const nav = navigator as Navigator & { usb?: any };
   if (nav.usb) {
     const devices = await nav.usb.getDevices();
     const printer = devices[0];
@@ -64,7 +64,7 @@ export async function printEscpos(bytes: ArrayBuffer): Promise<'gateway' | 'webu
 
 /** Demana permís WebUSB per a la impressora tèrmica (només Chrome). */
 export async function requestPrinter(): Promise<boolean> {
-  const nav = navigator as Navigator & { usb?: USB };
+  const nav = navigator as Navigator & { usb?: any };
   if (!nav.usb) return false;
   try {
     await nav.usb.requestDevice({ filters: [{ classCode: 7 }] }); // class 7 = printer

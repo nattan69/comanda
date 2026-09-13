@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { api, Category, MenuItem } from '@/lib/api';
+import { api, MenuCategory, MenuItem } from '@/lib/api';
 import { getT, Lang } from '@/lib/i18n';
 import { Plus, ShoppingCart } from 'lucide-react';
 
@@ -11,7 +11,7 @@ function OrdersPageInner() {
   const [lang] = useState<Lang>('ca');
   const t = getT(lang);
 
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<any[]>([]);
 
@@ -98,7 +98,10 @@ function OrdersPageInner() {
               className="btn-primary w-full py-3"
               disabled={cart.length === 0 || !tableId}
               onClick={async () => {
-                await api.createOrder(tableId!, cart);
+                await api.createOrder({
+                  table_id: tableId,
+                  items: cart.map(i => ({ menu_item_id: i.id, quantity: i.quantity })),
+                });
                 alert('Comanda enviada a cuina!');
                 setCart([]);
               }}

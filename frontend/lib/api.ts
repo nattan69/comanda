@@ -176,7 +176,7 @@ export const api = {
   },
   async createOrder(payload: {
     table_id?: string | null;
-    items: { item_id: string; quantity: number }[];
+    items: { menu_item_id: string; quantity: number }[];
     notes?: string;
     order_type?: string;
   }): Promise<Order> {
@@ -186,7 +186,7 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
-  async addItems(orderId: string, items: { item_id: string; quantity: number }[]): Promise<Order> {
+  async addItems(orderId: string, items: { menu_item_id: string; quantity: number }[]): Promise<Order> {
     return apiRequest<Order>(`/orders/${orderId}/items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
