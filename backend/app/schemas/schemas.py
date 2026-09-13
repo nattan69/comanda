@@ -238,3 +238,23 @@ class FiscalRecordOut(BaseModel):
     previous_chain_hash: Optional[str] = None
     record_type: str
     issued_at: datetime
+
+
+# ============================================================
+# CIERRE DEL DÍA
+# ============================================================
+class DayClosureRunRequest(BaseModel):
+    closure_date: Optional[date] = None  # per defecte: avui
+
+
+class DayClosureOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    closure_date: date
+    status: str
+    total_sales: float
+    orders_count: int
+    summary: Optional[dict] = None
+    emitted_to_pms: bool = False
+    emitted_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None

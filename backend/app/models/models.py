@@ -194,3 +194,28 @@ class FiscalRecord(Base):
     # Firma electrónica (en producción: firma con certificado)
     signature = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# CIERRE DEL DÍA (volcado diario para el PMS/Estada)
+# ============================================================
+class DayClosure(Base):
+    """Tancament del dia del TPV: ventes + pagaments per mètode.
+
+    És el volcat diari que Estada (PMS) consumirà per al quadrament de caixa
+    del night audit (targetes, efectiu, transferències...). Una fila per data
+    de negoci (idempotent).
+    """
+    __tablename__ = 'day_closures'
+    id = uuid_pk()
+    closure_date = Column(Date, nullable=False, unique=True)  # data de negoci
+    status = Column(String, default='completed')  # completed | failed
+    total_sales = Column(Numeric(12, 2), default=0)
+    orders_count = Column(Integer, default=0)
+    summary = Column(JSON)  # payments_by_method, orders_by_type, vat_breakdown...
+    external_id = Column(String)  # idempotència cap a Estada/Compta
+    emitted_to_pms = Column(Boolean, default=False)  # volcat a Estada fet?
+    emitted_at = Column(DateTime(timezone=True))
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
