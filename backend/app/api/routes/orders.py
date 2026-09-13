@@ -28,6 +28,7 @@ from ...services.receipt_service import (
     render_receipt_escpos,
 )
 from ...services.pms_adapter import get_pms_adapter
+from ...realtime import emit_sync
 
 router = APIRouter()
 
@@ -90,6 +91,13 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
     _recalc_total(order, db)
     db.commit()
     db.refresh(order)
+    emit_sync("order.created", {
+        "order_id": str(order.id),
+        "ticket_code": order.ticket_code,
+        "table_id": str(order.table_id) if order.table_id else None,
+        "center_id": str(order.center_id) if order.center_id else None,
+        "total_amount": str(order.total_amount or 0),
+    })
     return order
 
 
@@ -355,4 +363,11 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
 
     db.commit()
     db.refresh(payment)
+    emit_sync("order.paid", {
+        "order_id": str(order.id),
+        "payment_id": str(payment.id),
+        "method": method,
+        "ticket_code": payment.ticket_code,
+        "amount": str(payment.amount or 0),
+    })
     return payment

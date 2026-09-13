@@ -1,16 +1,19 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .api.routes import tables, menu, reservations, orders, staff, fiscal, integrations, closure, shifts, centers, establishments, room_credits
 from .db import engine, Base
 from .models import models  # Importar modelos para que SQLAlchemy los registre
 from .deps import require_auth
+from .realtime import manager, set_main_loop
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Inicialización automática del esquema de la base de datos.
     # Fase 0: create_all (idempotente). Sin migraciones Alembic por ahora.
     Base.metadata.create_all(bind=engine)
+    import asyncio
+    set_main_loop(asyncio.get_running_loop())
     yield
 
 app = FastAPI(title="Comanda Backend", version="0.1.0", lifespan=lifespan)
@@ -28,6 +31,18 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": "0.1.0"}
+
+
+# Temps real (WebSocket): PDA de cambrers + pantalla de cuina (KDS)
+@app.websocket("/api/v1/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Els clients només reben broadcasts; aquest receive manté la connexió viva.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 # Inclusión de routers (autenticación de dispositivo obligatoria en todos,
 # salvo staff/login+logout e integraciones, que usan PIN y API key respectivamente)
