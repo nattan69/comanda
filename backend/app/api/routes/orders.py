@@ -93,6 +93,23 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
     return order
 
 
+@router.get("/room-info")
+def get_room_info(
+    room_number: str,
+    db: Session = Depends(get_db),
+):
+    """Consulta el règim + nom del titular d'una habitació (proxy cap al PMS).
+
+    El frontend crida aquest endpoint (no Estada directament) perquè la clau
+    PMS no ha de sortir mai del backend. Retorna room_found, guest_name
+    (titular de la reserva), meal_plan, credit_type/limit i folio_balance.
+    """
+    adapter = get_pms_adapter()
+    if not adapter:
+        raise HTTPException(status_code=501, detail="PMS no configurat")
+    return adapter.verify_room(room_number)
+
+
 @router.get("/{order_id}", response_model=OrderOut)
 def get_order(order_id: UUID, db: Session = Depends(get_db)):
     order = db.get(Order, order_id)
