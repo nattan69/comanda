@@ -121,8 +121,8 @@ class MenuCategoryOut(MenuCategoryBase):
 
 class MenuItemBase(BaseModel):
     category_id: Optional[UUID] = None
-    income_category: str = "menjar"  # bodega | menjar | varis (categoria d'ingrés comptable)
-    family: Optional[str] = None  # lactis, sucs, whiskies, aperitius, snacks, cerveses, carns, peixos...
+    income_category_id: Optional[UUID] = None  # FK a income_categories (menjar, beguda, varis, drogueria, amenities...)
+    family_id: Optional[UUID] = None  # FK a families (lactis, sucs, whiskies, aperitius, snacks, cerveses, carns, peixos...)
     center_id: Optional[UUID] = None  # departament on es ven (Recepció, Minimarket...)
     name: str
     description: Optional[str] = None
@@ -132,6 +132,29 @@ class MenuItemBase(BaseModel):
     allergens: Optional[List[str]] = None
     is_available: bool = True
     is_active: bool = True
+
+
+class IncomeCategoryCreate(BaseModel):
+    name: str
+    account_code: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class IncomeCategoryOut(IncomeCategoryCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+
+
+class FamilyCreate(BaseModel):
+    name: str
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class FamilyOut(FamilyCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
 
 
 class MenuItemCreate(MenuItemBase):

@@ -86,16 +86,47 @@ class MenuCategory(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class IncomeCategory(Base):
+    """Categoria d'ingrés (comptable) dels articles.
+
+    Llista configurable: menjar, beguda, varis, drogueria, amenities, etc.
+    Cada una pot enllaçar amb el compte comptable PGC corresponent (7050,
+    7052, 7055...) per al volcat del tancament a Compta.
+    """
+    __tablename__ = 'income_categories'
+    id = uuid_pk()
+    name = Column(String, nullable=False)  # menjar, beguda, varis, drogueria, amenities...
+    account_code = Column(String)  # compte PGC opcional (7050, 7052, 7055...)
+    sort_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Family(Base):
+    """Família de producte de la carta (subcategorització comercial).
+
+    Llista configurable: lactis, sucs, whiskies, aperitius, snacks, cerveses,
+    carns, peixos, etc.
+    """
+    __tablename__ = 'families'
+    id = uuid_pk()
+    name = Column(String, nullable=False)  # lactis, sucs, whiskies, aperitius, snacks...
+    sort_order = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class MenuItem(Base):
     __tablename__ = 'menu_items'
     id = uuid_pk()
     category_id = Column(UUID(as_uuid=True), ForeignKey('menu_categories.id', ondelete='SET NULL'))
-    # Categoria d'ingrés (comptable): bodega (beguda), menjar, varis.
-    # Enllaça amb la categoria d'ingrés del tancament/Compta (menjar/beguda/varis).
-    income_category = Column(String, default='menjar')  # bodega | menjar | varis
-    # Família de producte: lactis, sucs, whiskies, aperitius, snacks, cerveses,
-    # carns, peixos... (subcategorització comercial de la carta).
-    family = Column(String)
+    # Categoria d'ingrés (comptable): FK a income_categories (menjar, beguda,
+    # varis, drogueria, amenities...). Enllaça amb la categoria d'ingrés del
+    # tancament/Compta.
+    income_category_id = Column(UUID(as_uuid=True), ForeignKey('income_categories.id', ondelete='SET NULL'))
+    # Família de producte: FK a families (lactis, sucs, whiskies, aperitius,
+    # snacks, cerveses, carns, peixos...).
+    family_id = Column(UUID(as_uuid=True), ForeignKey('families.id', ondelete='SET NULL'))
     # Departament (centre) on es ven l'article: ex. Recepció (trànsfer, late
     # check out, sauna...), Minimarket (aftersun, pack cerveses...). Null per
     # als articles generals de bar/restaurant.

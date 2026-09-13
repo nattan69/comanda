@@ -4,10 +4,12 @@ from typing import List
 from uuid import UUID
 
 from ...db import get_db
-from ...models.models import MenuCategory, MenuItem
+from ...models.models import MenuCategory, MenuItem, IncomeCategory, Family
 from ...schemas.schemas import (
     MenuCategoryCreate, MenuCategoryOut,
     MenuItemCreate, MenuItemOut,
+    IncomeCategoryCreate, IncomeCategoryOut,
+    FamilyCreate, FamilyOut,
 )
 
 router = APIRouter()
@@ -28,6 +30,40 @@ def create_category(payload: MenuCategoryCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(cat)
     return cat
+
+
+# ============================================================
+# CATEGORIES D'INGRÉS (comptables) — menjar, beguda, varis, drogueria, amenities...
+# ============================================================
+@router.get("/income-categories", response_model=List[IncomeCategoryOut])
+def list_income_categories(db: Session = Depends(get_db)):
+    return db.query(IncomeCategory).order_by(IncomeCategory.sort_order).all()
+
+
+@router.post("/income-categories", response_model=IncomeCategoryOut, status_code=status.HTTP_201_CREATED)
+def create_income_category(payload: IncomeCategoryCreate, db: Session = Depends(get_db)):
+    cat = IncomeCategory(**payload.model_dump())
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return cat
+
+
+# ============================================================
+# FAMÍLIES (subcategorització comercial) — lactis, sucs, whiskies, aperitius...
+# ============================================================
+@router.get("/families", response_model=List[FamilyOut])
+def list_families(db: Session = Depends(get_db)):
+    return db.query(Family).order_by(Family.sort_order).all()
+
+
+@router.post("/families", response_model=FamilyOut, status_code=status.HTTP_201_CREATED)
+def create_family(payload: FamilyCreate, db: Session = Depends(get_db)):
+    fam = Family(**payload.model_dump())
+    db.add(fam)
+    db.commit()
+    db.refresh(fam)
+    return fam
 
 
 # ============================================================
