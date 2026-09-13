@@ -20,9 +20,14 @@ export type Table = {
 export type MenuCategory = { id: string; name: string; sort_order?: number };
 export type MenuItem = {
   id: string;
-  category_id: string;
+  category_id?: string | null;
+  income_category_id?: string | null;
+  family_id?: string | null;
+  center_id?: string | null;
   name: string;
+  description?: string | null;
   price: number;
+  vat_rate?: number;
   available?: boolean;
 };
 export type OrderItem = {

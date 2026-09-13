@@ -137,8 +137,8 @@ export default function CartaPage() {
       {loading ? <p className="text-gray-400">Carregant…</p> : agrupats ? (
         agrupats.map(([grup, llista]) => (
           <div key={grup}>
-            <h2 className="text-lg font-bold text-brand-gold mt-4 mb-2">{grup} <span className="text-xs text-gray-500">({grup.length})</span></h2>
-            <Taula items={grup} families={families} ingressos={ingressos} centres={centres} nom={nom} esPensio={esPensio} />
+            <h2 className="text-lg font-bold text-brand-gold mt-4 mb-2">{grup} <span className="text-xs text-gray-500">({llista.length})</span></h2>
+            <Taula items={llista} families={families} ingressos={ingressos} centres={centres} nom={nom} esPensio={esPensio} />
           </div>
         ))
       ) : (

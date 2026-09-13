@@ -4,6 +4,7 @@ export const translations = {
       sala: 'Sala',
       comandes: 'Comandes',
       tancament: 'Tancament del dia',
+      carta: 'Carta',
     },
     sala: {
       title: 'Pla de Sala',
@@ -27,6 +28,7 @@ export const translations = {
       sala: 'Sala',
       comandes: 'Comandas',
       tancament: 'Cierre del día',
+      carta: 'Carta',
     },
     sala: {
       title: 'Plano de Sala',
@@ -50,6 +52,7 @@ export const translations = {
       sala: 'Floor Plan',
       comandes: 'Orders',
       tancament: 'Day Closure',
+      carta: 'Menu',
     },
     sala: {
       title: 'Floor Plan',
