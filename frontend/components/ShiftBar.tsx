@@ -50,8 +50,19 @@ export default function ShiftBar({ onCenter }: { onCenter?: (id: string | null) 
   const tanca = async () => {
     if (!shift) return;
     try {
-      await api.setOrderStatus(shift.id, 'closed'); // no és orders — el tancament de torn va al backend
-    } catch { /* el endpoint real de tancament el dirà la Maria si falta */ }
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/shifts/${shift.id}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('comanda-token') || ''}` },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => null);
+        throw new Error(typeof b?.detail === 'string' ? b.detail : `Error ${res.status}`);
+      }
+      setShift(null);
+      setMsg('Torn tancat ✅');
+      onCenter?.(null);
+    } catch (e) { setMsg(e instanceof Error ? e.message : 'Error tancant torn'); }
   };
 
   const centreNom = (id?: string | null) => centres.find((c) => c.id === id)?.name || '—';

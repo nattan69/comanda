@@ -5,6 +5,7 @@ import { getT } from '@/lib/i18n';
 import { LayoutDashboard, ClipboardList, Languages, Calculator } from 'lucide-react';
 import LogoutLink from '@/components/LogoutLink';
 import RoomCharge from '@/components/RoomCharge';
+import ShiftBar from '@/components/ShiftBar';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -61,6 +62,7 @@ export default function RootLayout({
           </nav>
 
           <main className="flex-1 overflow-y-auto p-0">
+            <ShiftBar />
             <RoomCharge />
             {children}
           </main>

@@ -19,6 +19,7 @@ function OrdersPageInner() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<any[]>([]);
   const [orderId, setOrderId] = useState<string | null>(null);       // comanda enviada d'aquesta taula
+  const [orderTotal, setOrderTotal] = useState(0);                    // total de la comanda enviada (fix total=0)
   const [modal, setModal] = useState<'cobrar' | 'void' | null>(null);
   const [printing, setPrinting] = useState(false);
 
@@ -110,6 +111,7 @@ function OrdersPageInner() {
                   items: cart.map(i => ({ menu_item_id: i.id, quantity: i.quantity })),
                 });
                 alert('Comanda enviada a cuina!');
+                setOrderTotal(total);  // guardar el total abans de buidar el carret
                 setOrderId((o as any)?.id ?? null);
                 setCart([]);
               }}
@@ -144,12 +146,12 @@ function OrdersPageInner() {
           </div>
         </div>
       {modal === 'cobrar' && orderId && (
-        <ModalCobrar orderId={orderId} total={total}
+        <ModalCobrar orderId={orderId} total={orderTotal}
           onClose={() => setModal(null)}
           onPaid={() => { setModal(null); alert('Cobrament registrat ✅'); setOrderId(null); }} />
       )}
       {modal === 'void' && orderId && (
-        <ModalVoid orderId={orderId} total={total}
+        <ModalVoid orderId={orderId} total={orderTotal}
           onClose={() => setModal(null)}
           onVoid={() => { setModal(null); alert('Càrrec anul·lat'); }} />
       )}
