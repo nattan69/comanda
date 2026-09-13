@@ -90,6 +90,16 @@ class MenuItem(Base):
     __tablename__ = 'menu_items'
     id = uuid_pk()
     category_id = Column(UUID(as_uuid=True), ForeignKey('menu_categories.id', ondelete='SET NULL'))
+    # Categoria d'ingrés (comptable): bodega (beguda), menjar, varis.
+    # Enllaça amb la categoria d'ingrés del tancament/Compta (menjar/beguda/varis).
+    income_category = Column(String, default='menjar')  # bodega | menjar | varis
+    # Família de producte: lactis, sucs, whiskies, aperitius, snacks, cerveses,
+    # carns, peixos... (subcategorització comercial de la carta).
+    family = Column(String)
+    # Departament (centre) on es ven l'article: ex. Recepció (trànsfer, late
+    # check out, sauna...), Minimarket (aftersun, pack cerveses...). Null per
+    # als articles generals de bar/restaurant.
+    center_id = Column(UUID(as_uuid=True), ForeignKey('centers.id', ondelete='SET NULL'))
     name = Column(String, nullable=False)
     description = Column(Text)
     price = Column(Numeric(10, 2), nullable=False)

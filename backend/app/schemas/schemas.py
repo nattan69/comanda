@@ -121,6 +121,9 @@ class MenuCategoryOut(MenuCategoryBase):
 
 class MenuItemBase(BaseModel):
     category_id: Optional[UUID] = None
+    income_category: str = "menjar"  # bodega | menjar | varis (categoria d'ingrés comptable)
+    family: Optional[str] = None  # lactis, sucs, whiskies, aperitius, snacks, cerveses, carns, peixos...
+    center_id: Optional[UUID] = None  # departament on es ven (Recepció, Minimarket...)
     name: str
     description: Optional[str] = None
     price: float
