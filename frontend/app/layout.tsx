@@ -18,9 +18,9 @@ export default function RootLayout({
   return (
     <html lang="ca">
       <body className={inter.className}>
-        <div className="flex min-h-screen">
+        <div className="flex h-screen overflow-hidden">
           {/* Sidebar Navigation */}
-          <nav className="w-64 bg-brand-navy border-r border-brand-gold/20 flex flex-col">
+          <nav className="w-64 shrink-0 sticky top-0 h-screen bg-brand-navy border-r border-brand-gold/20 flex flex-col overflow-y-auto">
             <div className="p-6 border-b border-brand-gold/20">
               <h1 className="text-2xl font-bold text-brand-gold tracking-tight">Comanda</h1>
               <p className="text-xs text-gray-400">TPV Bar/Restaurant</p>
@@ -60,7 +60,7 @@ export default function RootLayout({
             </div>
           </nav>
 
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-y-auto p-0">
             <RoomCharge />
             {children}
           </main>
