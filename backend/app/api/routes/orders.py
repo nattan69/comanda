@@ -8,7 +8,7 @@ from decimal import Decimal
 from datetime import datetime
 
 from ...db import get_db
-from ...models.models import Order, OrderItem, MenuItem, Void, Payment
+from ...models.models import Order, OrderItem, MenuItem, Void, Payment, RoomCredit
 from ...schemas.schemas import (
     OrderCreate,
     OrderOut,
@@ -243,6 +243,22 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
     if method not in ("cash", "card", "bizum", "split", "room_charge", "house"):
         raise HTTPException(status_code=400, detail="Mètode de pagament invàlid")
 
+    # Validació del càrrec a habitació (habilitació + topall)
+    if method == "room_charge":
+        if not payload.room_number:
+            raise HTTPException(status_code=400, detail="Cal indicar el número d'habitació")
+        rc = (
+            db.query(RoomCredit)
+            .filter(RoomCredit.room_number == payload.room_number)
+            .first()
+        )
+        if rc and not rc.enabled:
+            raise HTTPException(status_code=400, detail="Habitació sense crèdit habilitat")
+        if rc and Decimal(str(rc.credit_limit or 0)) > 0:
+            new_balance = Decimal(str(rc.current_balance or 0)) + Decimal(str(payload.amount))
+            if new_balance > Decimal(str(rc.credit_limit)):
+                raise HTTPException(status_code=400, detail="Habitació topada (supera el límit de crèdit)")
+
     seq = "INV" if method == "house" else "TICKET"
     _, ticket_code = next_ticket_number(db, seq)
 
@@ -269,6 +285,16 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
     if paid_total >= Decimal(str(order.total_amount or 0)):
         order.status = "paid"
         order.closed_at = datetime.now()
+
+    # Actualitzar el crèdit acumulat de l'habitació (room charge)
+    if method == "room_charge":
+        rc = (
+            db.query(RoomCredit)
+            .filter(RoomCredit.room_number == payload.room_number)
+            .first()
+        )
+        if rc:
+            rc.current_balance = Decimal(str(rc.current_balance or 0)) + Decimal(str(payload.amount))
 
     db.commit()
     db.refresh(payment)

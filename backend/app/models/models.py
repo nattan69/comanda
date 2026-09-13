@@ -369,3 +369,24 @@ class FichajeEvent(Base):
     device = Column(String)  # dispositiu des del que es va fitxar
     source = Column(String, default='jornada')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# CRÈDIT D'HABITACIÓ (room charge) — habilitació i topall
+# ============================================================
+class RoomCredit(Base):
+    """Límit de crèdit per habitació (room charge).
+
+    El càrrec a l'habitació només es permet si l'habitació el té **habilitat**
+    i no està **topada** (el crèdit acumulat no supera el topall). La font de
+    veritat del topall és el PMS (Estada); aquesta taula n'és la còpia local
+    per validar ràpidament al TPV sense cridar el PMS a cada càrrec.
+    """
+    __tablename__ = 'room_credits'
+    id = uuid_pk()
+    room_number = Column(String, unique=True, nullable=False)
+    enabled = Column(Boolean, default=True, nullable=False)  # habitació habilitada per crèdit
+    credit_limit = Column(Numeric(10, 2), default=0)  # topall (0 = sense límit)
+    current_balance = Column(Numeric(10, 2), default=0)  # crèdit acumulat
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from .api.routes import tables, menu, reservations, orders, staff, fiscal, integrations, closure, shifts, centers, establishments
+from .api.routes import tables, menu, reservations, orders, staff, fiscal, integrations, closure, shifts, centers, establishments, room_credits
 from .db import engine, Base
 from .models import models  # Importar modelos para que SQLAlchemy los registre
 
@@ -40,6 +40,7 @@ app.include_router(closure.router, prefix="/api/v1/closure", tags=["Closure"])
 app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["Shifts"])
 app.include_router(centers.router, prefix="/api/v1/centers", tags=["Centers"])
 app.include_router(establishments.router, prefix="/api/v1/establishments", tags=["Establishments"])
+app.include_router(room_credits.router, prefix="/api/v1/room-credits", tags=["RoomCredits"])
 
 if __name__ == "__main__":
     import uvicorn
