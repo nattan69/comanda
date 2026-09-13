@@ -1,9 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .api.routes import tables, menu, reservations, orders, staff, fiscal, integrations, closure, shifts, centers, establishments, room_credits
 from .db import engine, Base
 from .models import models  # Importar modelos para que SQLAlchemy los registre
+from .deps import require_auth
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,19 +29,20 @@ app.add_middleware(
 async def health_check():
     return {"status": "ok", "version": "0.1.0"}
 
-# Inclusión de routers
-app.include_router(tables.router, prefix="/api/v1/tables", tags=["Tables"])
-app.include_router(menu.router, prefix="/api/v1/menu", tags=["Menu"])
-app.include_router(reservations.router, prefix="/api/v1/reservations", tags=["Reservations"])
-app.include_router(orders.router, prefix="/api/v1/orders", tags=["Orders"])
+# Inclusión de routers (autenticación de dispositivo obligatoria en todos,
+# salvo staff/login+logout e integraciones, que usan PIN y API key respectivamente)
+app.include_router(tables.router, prefix="/api/v1/tables", tags=["Tables"], dependencies=[Depends(require_auth)])
+app.include_router(menu.router, prefix="/api/v1/menu", tags=["Menu"], dependencies=[Depends(require_auth)])
+app.include_router(reservations.router, prefix="/api/v1/reservations", tags=["Reservations"], dependencies=[Depends(require_auth)])
+app.include_router(orders.router, prefix="/api/v1/orders", tags=["Orders"], dependencies=[Depends(require_auth)])
 app.include_router(staff.router, prefix="/api/v1/staff", tags=["Staff"])
-app.include_router(fiscal.router, prefix="/api/v1/fiscal", tags=["Fiscal"])
+app.include_router(fiscal.router, prefix="/api/v1/fiscal", tags=["Fiscal"], dependencies=[Depends(require_auth)])
 app.include_router(integrations.router, prefix="/api/v1/integrations", tags=["Integrations"])
-app.include_router(closure.router, prefix="/api/v1/closure", tags=["Closure"])
-app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["Shifts"])
-app.include_router(centers.router, prefix="/api/v1/centers", tags=["Centers"])
-app.include_router(establishments.router, prefix="/api/v1/establishments", tags=["Establishments"])
-app.include_router(room_credits.router, prefix="/api/v1/room-credits", tags=["RoomCredits"])
+app.include_router(closure.router, prefix="/api/v1/closure", tags=["Closure"], dependencies=[Depends(require_auth)])
+app.include_router(shifts.router, prefix="/api/v1/shifts", tags=["Shifts"], dependencies=[Depends(require_auth)])
+app.include_router(centers.router, prefix="/api/v1/centers", tags=["Centers"], dependencies=[Depends(require_auth)])
+app.include_router(establishments.router, prefix="/api/v1/establishments", tags=["Establishments"], dependencies=[Depends(require_auth)])
+app.include_router(room_credits.router, prefix="/api/v1/room-credits", tags=["RoomCredits"], dependencies=[Depends(require_auth)])
 
 if __name__ == "__main__":
     import uvicorn
