@@ -258,3 +258,22 @@ class DayClosureOut(BaseModel):
     emitted_to_pms: bool = False
     emitted_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+
+
+# ============================================================
+# ANUL·LACIONS
+# ============================================================
+class VoidCreate(BaseModel):
+    amount: float
+    reason: Optional[str] = None
+    authorized_by_id: Optional[UUID] = None  # el cap/manager que autoritza
+
+
+class VoidOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    order_id: UUID
+    amount: float
+    reason: Optional[str] = None
+    authorized_by_id: Optional[UUID] = None
+    authorized_at: Optional[datetime] = None

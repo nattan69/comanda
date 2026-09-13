@@ -3,10 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 from decimal import Decimal
+from datetime import datetime
 
 from ...db import get_db
-from ...models.models import Order, OrderItem, MenuItem
-from ...schemas.schemas import OrderCreate, OrderOut, OrderItemCreate, OrderItemOut
+from ...models.models import Order, OrderItem, MenuItem, Void
+from ...schemas.schemas import OrderCreate, OrderOut, OrderItemCreate, OrderItemOut, VoidCreate, VoidOut
 
 router = APIRouter()
 
@@ -119,3 +120,33 @@ def update_order_status(order_id: UUID, status_value: str, db: Session = Depends
     db.commit()
     db.refresh(order)
     return order
+
+
+@router.post("/{order_id}/void", response_model=VoidOut, status_code=status.HTTP_201_CREATED)
+def void_order(order_id: UUID, payload: VoidCreate, db: Session = Depends(get_db)):
+    """Anul·la una comanda (o part), autoritzada per un cap/manager.
+
+    Registra l'anul·lació amb qui l'ha autoritzada i el motiu, perquè surti al
+    tancament del dia (la Z) com a línia a part. Si s'anul·la l'import total,
+    la comanda passa a `cancelled`.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Comanda no encontrada")
+
+    void = Void(
+        order_id=order_id,
+        amount=Decimal(str(payload.amount)),
+        reason=payload.reason,
+        authorized_by_id=payload.authorized_by_id,
+    )
+    db.add(void)
+
+    # Si s'anul·la el total (o més), la comanda queda cancel·lada.
+    if Decimal(str(payload.amount)) >= Decimal(str(order.total_amount or 0)):
+        order.status = "cancelled"
+        order.closed_at = datetime.now()
+
+    db.commit()
+    db.refresh(void)
+    return void

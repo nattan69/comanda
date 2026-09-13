@@ -134,6 +134,9 @@ class Order(Base):
     total_amount = Column(Numeric(10, 2), default=0)
     discount_amount = Column(Numeric(10, 2), default=0)
     notes = Column(Text)
+    # Càrrec a habitació (room charge): número d'habitació de l'hotel a qui es
+    # carrega el consum. Quan és None, el client paga directament al TPV.
+    room_number = Column(String)
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -218,4 +221,23 @@ class DayClosure(Base):
     emitted_at = Column(DateTime(timezone=True))
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# ANUL·LACIONS (autoritzades per un cap)
+# ============================================================
+class Void(Base):
+    """Anul·lació d'una comanda (o part), autoritzada per un cap/manager.
+
+    Les anul·lacions queden registrades amb qui les ha autoritzat (un cap) i el
+    motiu, perquè surtin al tancament del dia (la Z) com a línia a part.
+    """
+    __tablename__ = 'voids'
+    id = uuid_pk()
+    order_id = Column(UUID(as_uuid=True), ForeignKey('orders.id', ondelete='CASCADE'), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)  # import anul·lat
+    reason = Column(String)  # motiu de l'anul·lació
+    authorized_by_id = Column(UUID(as_uuid=True), ForeignKey('staff.id', ondelete='SET NULL'))  # el cap que autoritza
+    authorized_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
