@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ..models.models import DayClosure, Order, OrderItem, Payment, Void
 from .ticket_service import next_ticket_number
 from .pms_adapter import get_pms_adapter
+from .comanda_client import envia_cierre_a_compta
 
 # Mètodes de pagament que són "venda real" (declarables). `house` (invitació) va a part.
 NON_SALE_METHODS = {"house"}
@@ -251,6 +252,20 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         if pms_result.get("success"):
             closure.emitted_to_pms = True
             closure.emitted_at = datetime.now(timezone.utc)
+
+    # Volcat cap a Compta (assentament de CONTROL del tancament de caixa).
+    try:
+        compta_result = envia_cierre_a_compta(
+            external_id=closure.external_id,
+            date_str=closure_date.isoformat(),
+            concept=f"Tancament de caixa TPV {closure_date.isoformat()}",
+            summary=closure.summary,
+        )
+    except Exception as exc:  # el tancament no falla pel volcat comptable
+        compta_result = {"ok": False, "error": str(exc)}
+    closure.compta_response = compta_result
+    if compta_result.get("ok"):
+        closure.emitted_to_compta = True
 
     db.commit()
     db.refresh(closure)

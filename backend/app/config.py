@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     PMS_API_URL: str = ""
     PMS_API_KEY: str = ""
 
+    # Integració Compta (assentaments del tancament Z cap al hub comptable)
+    COMPTA_URL: str = "http://localhost:8010"  # servei de Compta
+    COMPTA_KEY_COMANDA: str = ""  # clau per a l'intake /api/v1/intake/comanda
+
     # VeriFactu (cumplimiento fiscal)
     # Nombre del software declarado ante la AEAT
     VERIFACTU_SOFTWARE_NAME: str = "Comanda TPV"
