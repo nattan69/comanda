@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     JORNADA_API_KEY: str = ""  # clau pròpia de la integració Jornada
     DEBUG: bool = False
 
+    # Integració PMS (room charges cap a Estada o Mews/Cloudbeds...)
+    PMS_PROVIDER: str = ""  # internal (Estada) | mews | ... (buit = desactivat)
+    PMS_API_URL: str = ""
+    PMS_API_KEY: str = ""
+
     # VeriFactu (cumplimiento fiscal)
     # Nombre del software declarado ante la AEAT
     VERIFACTU_SOFTWARE_NAME: str = "Comanda TPV"

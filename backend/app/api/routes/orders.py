@@ -3,7 +3,7 @@ from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from decimal import Decimal
 from datetime import datetime
 
@@ -27,6 +27,7 @@ from ...services.receipt_service import (
     render_receipt_text,
     render_receipt_escpos,
 )
+from ...services.pms_adapter import get_pms_adapter
 
 router = APIRouter()
 
@@ -249,20 +250,51 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
         raise HTTPException(status_code=400, detail="Mètode de pagament invàlid")
 
     # Validació del càrrec a habitació (habilitació + topall)
+    pms_result = None
     if method == "room_charge":
         if not payload.room_number:
             raise HTTPException(status_code=400, detail="Cal indicar el número d'habitació")
-        rc = (
-            db.query(RoomCredit)
-            .filter(RoomCredit.room_number == payload.room_number)
-            .first()
-        )
-        if rc and not rc.enabled:
-            raise HTTPException(status_code=400, detail="Habitació sense crèdit habilitat")
-        if rc and Decimal(str(rc.credit_limit or 0)) > 0:
-            new_balance = Decimal(str(rc.current_balance or 0)) + Decimal(str(payload.amount))
-            if new_balance > Decimal(str(rc.credit_limit)):
-                raise HTTPException(status_code=400, detail="Habitació topada (supera el límit de crèdit)")
+
+        # Si hi ha PMS configurat (Estada), el càrrec es posta al foli del client.
+        # El PMS valida guest + règim + línia de crèdit i és la font de veritat.
+        adapter = get_pms_adapter()
+        if adapter:
+            pms_result = adapter.post_room_charge(
+                external_id=f"comanda-pay-{uuid4()}",
+                room_number=payload.room_number,
+                amount=Decimal(str(payload.amount)),
+                items=[
+                    {
+                        "name": it.name_snapshot or "Article",
+                        "qty": it.quantity,
+                        "price": str(it.price_snapshot or 0),
+                        "tax_rate": str(it.vat_rate or 0),
+                    }
+                    for it in order.items
+                ],
+                guest_name=payload.guest_name,
+                staff_id=str(order.staff_id) if order.staff_id else None,
+            )
+            if not pms_result.get("success"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=pms_result.get("message")
+                    or pms_result.get("error")
+                    or "El PMS ha rebutjat el càrrec",
+                )
+        else:
+            # Sense PMS: validació local (còpia RoomCredit)
+            rc = (
+                db.query(RoomCredit)
+                .filter(RoomCredit.room_number == payload.room_number)
+                .first()
+            )
+            if rc and not rc.enabled:
+                raise HTTPException(status_code=400, detail="Habitació sense crèdit habilitat")
+            if rc and Decimal(str(rc.credit_limit or 0)) > 0:
+                new_balance = Decimal(str(rc.current_balance or 0)) + Decimal(str(payload.amount))
+                if new_balance > Decimal(str(rc.credit_limit)):
+                    raise HTTPException(status_code=400, detail="Habitació topada (supera el límit de crèdit)")
 
     seq = "INV" if method == "house" else "TICKET"
     _, ticket_code = next_ticket_number(db, seq)
@@ -278,6 +310,8 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
         invited_by=payload.invited_by,
         reason=payload.reason,
         card_reference=payload.card_reference,
+        pms_posted=bool(pms_result and pms_result.get("success")),
+        pms_response=pms_result,
     )
     db.add(payment)
 
@@ -292,8 +326,8 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
         order.status = "paid"
         order.closed_at = datetime.now()
 
-    # Actualitzar el crèdit acumulat de l'habitació (room charge)
-    if method == "room_charge":
+    # Actualitzar el crèdit acumulat de l'habitació (només sense PMS local)
+    if method == "room_charge" and pms_result is None:
         rc = (
             db.query(RoomCredit)
             .filter(RoomCredit.room_number == payload.room_number)

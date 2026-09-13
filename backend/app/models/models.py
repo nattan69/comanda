@@ -233,6 +233,9 @@ class Payment(Base):
     reason = Column(String)  # motiu de la invitació (o de l'anul·lació)
     # SoftPOS (targeta): referència de la transacció del banc per conciliar.
     card_reference = Column(String)  # ex. ID/autorització del TPV virtual
+    # Room charge: resultat del post al PMS (Estada/Mews).
+    pms_posted = Column(Boolean, default=False)  # el càrrec s'ha postat al foli del PMS?
+    pms_response = Column(JSON)  # resposta del PMS (per audit)
     paid_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
