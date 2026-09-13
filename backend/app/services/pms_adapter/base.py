@@ -32,3 +32,16 @@ class PMSAdapterBase(ABC):
         Retorna un dict amb: success, folio_id, folio_item_id, reservation_id,
         error, message.
         """
+
+    @abstractmethod
+    def post_day_closure(
+        self,
+        external_id: str,
+        closure_date,
+        summary: dict,
+        center_name: Optional[str] = None,
+    ) -> dict:
+        """Envia el tancament de caixa diari (Z) al PMS per al quadrament del Night Audit.
+
+        Retorna un dict amb: success, id, duplicate, error, message.
+        """

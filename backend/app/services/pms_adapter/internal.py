@@ -71,3 +71,18 @@ class InternalAdapter(PMSAdapterBase):
         if timestamp is not None:
             body["timestamp"] = timestamp.isoformat()
         return self._request("POST", "/integrations/pos/room-charges", body)
+
+    def post_day_closure(
+        self,
+        external_id: str,
+        closure_date,
+        summary: dict,
+        center_name: Optional[str] = None,
+    ) -> dict:
+        body = {
+            "external_id": external_id,
+            "closure_date": closure_date.isoformat() if hasattr(closure_date, "isoformat") else str(closure_date),
+            "center_name": center_name,
+            "summary": summary,
+        }
+        return self._request("POST", "/integrations/pos/day-closure", body)

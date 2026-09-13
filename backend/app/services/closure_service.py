@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from ..models.models import DayClosure, Order, OrderItem, Payment, Void
 from .ticket_service import next_ticket_number
+from .pms_adapter import get_pms_adapter
 
 # Mètodes de pagament que són "venda real" (declarables). `house` (invitació) va a part.
 NON_SALE_METHODS = {"house"}
@@ -232,6 +233,25 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         completed_at=datetime.now(timezone.utc),
     )
     db.add(closure)
+    db.flush()
+
+    # Volcat cap al PMS (Estada): el Night Audit quadra la caixa del bar/restaurant.
+    # Si el PMS no respon, la Z es tanca igualment i el volcat es pot reintentar.
+    adapter = get_pms_adapter()
+    if adapter:
+        try:
+            pms_result = adapter.post_day_closure(
+                external_id=closure.external_id,
+                closure_date=closure_date,
+                summary=closure.summary,
+            )
+        except Exception as exc:  # no volem que el tancament falli pel volcat
+            pms_result = {"success": False, "error": "pms_exception", "message": str(exc)}
+        closure.pms_response = pms_result
+        if pms_result.get("success"):
+            closure.emitted_to_pms = True
+            closure.emitted_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(closure)
     return closure

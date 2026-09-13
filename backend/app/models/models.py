@@ -283,6 +283,7 @@ class DayClosure(Base):
     external_id = Column(String)  # idempotència cap a Estada/Compta
     emitted_to_pms = Column(Boolean, default=False)  # volcat a Estada fet?
     emitted_at = Column(DateTime(timezone=True))
+    pms_response = Column(JSON)  # resposta del PMS al volcat (per audit)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
