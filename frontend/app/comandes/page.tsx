@@ -3,7 +3,11 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, MenuCategory, MenuItem } from '@/lib/api';
 import { getT, Lang } from '@/lib/i18n';
-import { Plus, ShoppingCart } from 'lucide-react';
+import { Plus, ShoppingCart, CreditCard, Printer, Undo2 } from 'lucide-react';
+import ModalCobrar from '@/components/ModalCobrar';
+import ModalVoid from '@/components/ModalVoid';
+import { imprimeixTicket } from '@/lib/printer';
+import { getStoredStaff } from '@/lib/api';
 
 function OrdersPageInner() {
   const searchParams = useSearchParams();
@@ -14,6 +18,9 @@ function OrdersPageInner() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [cart, setCart] = useState<any[]>([]);
+  const [orderId, setOrderId] = useState<string | null>(null);       // comanda enviada d'aquesta taula
+  const [modal, setModal] = useState<'cobrar' | 'void' | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -98,19 +105,54 @@ function OrdersPageInner() {
               className="btn-primary w-full py-3"
               disabled={cart.length === 0 || !tableId}
               onClick={async () => {
-                await api.createOrder({
+                const o = await api.createOrder({
                   table_id: tableId,
                   items: cart.map(i => ({ menu_item_id: i.id, quantity: i.quantity })),
                 });
                 alert('Comanda enviada a cuina!');
+                setOrderId((o as any)?.id ?? null);
                 setCart([]);
               }}
             >
               {t.comandes.confirm}
             </button>
+
+            {orderId && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                <button onClick={() => setModal('cobrar')}
+                  className="py-3 rounded-xl bg-green-500/90 hover:bg-green-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition">
+                  <CreditCard size={18} /> Cobrar
+                </button>
+                <button onClick={() => setModal('void')}
+                  className="py-3 rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition">
+                  <Undo2 size={18} /> Anul·lar
+                </button>
+                <button
+                  disabled={printing}
+                  onClick={async () => {
+                    setPrinting(true);
+                    try { await imprimeixTicket(orderId); alert('Tiquet enviat a la impressora'); }
+                    catch (e) { alert(e instanceof Error ? e.message : 'Error imprimint'); }
+                    finally { setPrinting(false); }
+                  }}
+                  className="py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 transition disabled:opacity-40">
+                  <Printer size={18} /> {printing ? '…' : 'Imprimir'}
+                </button>
+              </div>
+            )}
+          </div>
           </div>
         </div>
-      </div>
+      {modal === 'cobrar' && orderId && (
+        <ModalCobrar orderId={orderId} total={total}
+          onClose={() => setModal(null)}
+          onPaid={() => { setModal(null); alert('Cobrament registrat ✅'); setOrderId(null); }} />
+      )}
+      {modal === 'void' && orderId && (
+        <ModalVoid orderId={orderId} total={total}
+          onClose={() => setModal(null)}
+          onVoid={() => { setModal(null); alert('Càrrec anul·lat'); }} />
+      )}
     </div>
   );
 }
