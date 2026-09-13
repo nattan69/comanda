@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { getT } from '@/lib/i18n';
 import { LayoutDashboard, ClipboardList, Languages, Calculator } from 'lucide-react';
 import LogoutLink from '@/components/LogoutLink';
+import RoomCharge from '@/components/RoomCharge';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -60,6 +61,7 @@ export default function RootLayout({
           </nav>
 
           <main className="flex-1 overflow-auto">
+            <RoomCharge />
             {children}
           </main>
         </div>

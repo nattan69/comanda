@@ -292,3 +292,22 @@ export const apiCarta = {
   },
   async getCenters(): Promise<Center[]> { return apiRequest<Center[]>('/centers'); },
 };
+
+// ---------- Room charge (càrrec a habitació) ----------
+export type RoomInfo = {
+  room_found: boolean;
+  reservation_found: boolean;
+  guest_name?: string | null;
+  meal_plan?: string;
+  meal_plan_price?: string;
+  credit_type?: 'full' | 'limited' | 'none' | string;
+  credit_limit?: string;
+  folio_balance?: string;
+};
+
+export const apiRoom = {
+  /** Info de l'habitació per al room charge: titular, règim i crèdit (via Comanda, mai directe a Estada). */
+  async roomInfo(roomNumber: string): Promise<RoomInfo> {
+    return apiRequest<RoomInfo>(`/orders/room-info?room_number=${encodeURIComponent(roomNumber)}`);
+  },
+};
