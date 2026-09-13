@@ -1,11 +1,11 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, Category, MenuItem } from '@/lib/api';
 import { getT, Lang } from '@/lib/i18n';
 import { Plus, ShoppingCart } from 'lucide-react';
 
-export default function OrdersPage() {
+function OrdersPageInner() {
   const searchParams = useSearchParams();
   const tableId = searchParams.get('table');
   const [lang] = useState<Lang>('ca');
@@ -109,5 +109,13 @@ export default function OrdersPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-gray-400">Carregant...</div>}>
+      <OrdersPageInner />
+    </Suspense>
   );
 }

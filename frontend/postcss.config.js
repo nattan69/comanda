@@ -1,3 +1,6 @@
 module.exports = {
-  pageSize: 20,
-}
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
