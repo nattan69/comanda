@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MenuItem, Family, IncomeCategory, Center, apiCarta } from '@/lib/api';
 
 /**
@@ -9,7 +9,7 @@ import { MenuItem, Family, IncomeCategory, Center, apiCarta } from '@/lib/api';
  */
 
 export default function FitxaArticle({
-  item, families, ingressos, centres, onClose, onSaved,
+  item, families: famProp, ingressos: ingProp, centres: cenProp, onClose, onSaved,
 }: {
   item: MenuItem;
   families: Family[];
@@ -30,6 +30,26 @@ export default function FitxaArticle({
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Les llistes poden arribar buides (error de càrrega a la pàgina pare, ex. 401 de
+  // require_auth amb sessió vella) → les recarreguem nosaltres mateixos un cop.
+  const [families, setFamilies] = useState<Family[]>(famProp || []);
+  const [ingressos, setIngressos] = useState<IncomeCategory[]>(ingProp || []);
+  const [centres, setCentres] = useState<Center[]>(cenProp || []);
+  const [carregant, setCarregant] = useState(false);
+
+  useEffect(() => {
+    if (famProp.length || ingProp.length) return; // la pare ja ens ho va donar
+    setCarregant(true);
+    (async () => {
+      try {
+        const [f, ic, c] = await Promise.all([
+          apiCarta.getFamilies(), apiCarta.getIncomeCategories(), apiCarta.getCenters(),
+        ]);
+        setFamilies(f); setIngressos(ic); setCentres(c);
+      } catch { /* error mostrat als selects — l'usuari veu que no hi ha res */ }
+      finally { setCarregant(false); }
+    })();
+  }, []);
 
   const guardar = async () => {
     if (!form.name.trim() || !form.price) { setError('Nom i preu obligatoris'); return; }
@@ -58,7 +78,7 @@ export default function FitxaArticle({
       <span className="text-xs text-gray-400">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)}
         className="w-full mt-1 bg-white/5 text-white text-sm p-2 rounded border border-white/15">
-        <option value="">— cap —</option>
+        <option value="">{carregant ? 'carregant…' : '— cap —'}</option>
         {opcions.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
     </label>
