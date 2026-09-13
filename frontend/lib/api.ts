@@ -249,3 +249,46 @@ export const api = {
     return apiRequest<DayClosure>(`/closure/${id}`);
   },
 };
+// ---------- Carta: famílies, categories d'ingrés, centres ----------
+export type IncomeCategory = { id: string; name: string; account_code?: string; sort_order?: number; is_active?: boolean };
+export type Family = { id: string; name: string; sort_order?: number; is_active?: boolean };
+export type Center = { id: string; name: string; external_id?: string | null; source?: string | null };
+
+export const apiCarta = {
+  // articles amb els 3 nivells nous
+  async getItems(): Promise<MenuItem[]> {
+    return apiRequest<MenuItem[]>('/menu/items');
+  },
+  async createItem(payload: {
+    name: string; price: number; vat_rate?: number;
+    income_category_id?: string | null; family_id?: string | null;
+    center_id?: string | null; description?: string | null;
+  }): Promise<MenuItem> {
+    return apiRequest<MenuItem>('/menu/items', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+  async updateItem(itemId: string, payload: Record<string, unknown>): Promise<MenuItem> {
+    return apiRequest<MenuItem>(`/menu/items/${itemId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  },
+  // gestió de famílies i categories (CRUD simple)
+  async getFamilies(): Promise<Family[]> { return apiRequest<Family[]>('/menu/families'); },
+  async createFamily(name: string, sortOrder = 0): Promise<Family> {
+    return apiRequest<Family>('/menu/families', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, sort_order: sortOrder }),
+    });
+  },
+  async getIncomeCategories(): Promise<IncomeCategory[]> { return apiRequest<IncomeCategory[]>('/menu/income-categories'); },
+  async createIncomeCategory(name: string, accountCode?: string, sortOrder = 0): Promise<IncomeCategory> {
+    return apiRequest<IncomeCategory>('/menu/income-categories', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, account_code: accountCode, sort_order: sortOrder }),
+    });
+  },
+  async getCenters(): Promise<Center[]> { return apiRequest<Center[]>('/centers'); },
+};

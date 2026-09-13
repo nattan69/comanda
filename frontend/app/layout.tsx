@@ -43,6 +43,10 @@ export default function RootLayout({
             </div>
 
             <div className="p-4 border-t border-brand-gold/20 space-y-2">
+              <a href="/carta" className="flex items-center gap-3 p-3 rounded-lg hover:bg-brand-gold/10 text-white transition-colors group">
+                <ClipboardList size={20} className="text-brand-gold group-hover:scale-110 transition-transform" />
+                <span>{t.nav.carta || 'Carta'}</span>
+              </a>
               <a href="/tancament" className="flex items-center gap-3 p-3 rounded-lg hover:bg-brand-gold/10 text-white transition-colors group">
                 <Calculator size={20} className="text-brand-gold group-hover:scale-110 transition-transform" />
                 <span>{t.nav.tancament || 'Tancament del dia'}</span>
