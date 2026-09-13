@@ -1,9 +1,13 @@
 """
-Servei de tancament del dia del TPV (informe Z).
+Servei de tancament del dia del TPV (informes X i Z).
 
-Calcula la "Z" completa del dia: vendes brutes, descomptes, pagaments per
-mètode (efectiu, targeta, bizum, càrrecs a habitació), càrrecs a habitacions,
-anul·lacions autoritzades per un cap, i el desglossament d'IVA.
+- **Informe X (pre-tancament)**: lectura del que hi ha fins al moment. Es pot
+  emetre TANTES VEGADES com calgui, sense tancar res.
+- **Informe Z (tancament)**: definitiu, una vegada per dia (idempotent). Tanca
+  les comandes obertes forçosament i crea la fila `DayClosure`.
+
+Tots dos comparteixen el càlcul (`_compute_summary`). La diferència: la Z tanca
+les comandes obertes i persisteix; la X només les llista com a obertes.
 
 Les INVITACIONS (`house`) NO formen part de la venda: es llisten A PART (clau
 `house`), fora del total i del desglossament d'IVA, per no declarar-ne l'IVA.
@@ -18,6 +22,7 @@ from .ticket_service import next_ticket_number
 
 # Mètodes de pagament que són "venda real" (declarables). `house` (invitació) va a part.
 NON_SALE_METHODS = {"house"}
+OPEN_STATUSES = ["open", "sent_to_kitchen", "served"]
 
 
 def _day_bounds(closure_date: date) -> tuple[datetime, datetime]:
@@ -27,19 +32,10 @@ def _day_bounds(closure_date: date) -> tuple[datetime, datetime]:
     return start, end
 
 
-def run_day_closure(db: Session, closure_date: date) -> DayClosure:
-    """Executa (idempotent) el tancament del dia (la Z) i el retorna."""
-    existing = (
-        db.query(DayClosure)
-        .filter(DayClosure.closure_date == closure_date)
-        .first()
-    )
-    if existing:
-        return existing
-
+def _compute_summary(db: Session, closure_date: date, close_open: bool) -> dict:
+    """Calcula el resum del dia. Si `close_open`, tanca les comandes obertes."""
     start, end = _day_bounds(closure_date)
 
-    # --- Ventes del dia (comandes tancades) ---
     orders = (
         db.query(Order)
         .filter(
@@ -51,7 +47,6 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         .all()
     )
 
-    # Identificar les comandes d'invitació (pagades amb `house`) — NO són venda.
     house_order_ids = {
         p.order_id
         for p in db.query(Payment).filter(
@@ -75,7 +70,6 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         t = (o.order_type or "dine_in").strip() or "dine_in"
         orders_by_type[t] = orders_by_type.get(t, 0) + 1
 
-    # --- Pagaments del dia per mètode (SENSE house, que va a part) ---
     payments = (
         db.query(Payment)
         .filter(
@@ -90,12 +84,11 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
     for p in payments:
         method = (p.method or "other").strip().lower() or "other"
         if method in NON_SALE_METHODS:
-            continue  # house es llista a part
+            continue
         payments_by_method[method] = str(
             Decimal(payments_by_method.get(method, "0")) + Decimal(str(p.amount or 0))
         )
 
-    # --- Càrrecs a habitacions (room charges) ---
     room_charges: dict[str, dict] = {}
     for o in declarable_orders:
         if o.room_number:
@@ -109,7 +102,6 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
     ]
     room_charges_total = sum((Decimal(r["total"]) for r in room_charges_list), Decimal("0"))
 
-    # --- Anul·lacions autoritzades (voids) ---
     voids = (
         db.query(Void)
         .filter(Void.authorized_at >= start, Void.authorized_at < end)
@@ -121,13 +113,13 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
             "amount": str(v.amount),
             "reason": v.reason or "",
             "authorized_by_id": str(v.authorized_by_id) if v.authorized_by_id else None,
+            "ticket_code": v.ticket_code or "",
             "authorized_at": v.authorized_at.isoformat() if v.authorized_at else None,
         }
         for v in voids
     ]
     voids_total = sum((Decimal(v["amount"]) for v in voids_list), Decimal("0"))
 
-    # --- Desglossament d'IVA per tipus (només vendes declarables) ---
     order_ids = [o.id for o in declarable_orders]
     vat_map: dict[str, Decimal] = {}
     base_map: dict[str, Decimal] = {}
@@ -147,22 +139,84 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         for rate in sorted(base_map.keys(), key=lambda r: Decimal(r))
     ]
 
-    # --- Tancament forçat de comandes obertes (queden pendents de cobrament) ---
+    summary: dict = {
+        "gross_sales": str(total_sales),
+        "discounts_total": str(discounts_total),
+        "net_sales": str(total_sales - discounts_total),
+        "payments_by_method": payments_by_method,
+        "payments_total": str(sum(Decimal(v) for v in payments_by_method.values())),
+        "orders_by_type": orders_by_type,
+        "house": {
+            "total": str(house_total),
+            "orders": len(house_orders),
+        },
+        "room_charges": room_charges_list,
+        "room_charges_total": str(room_charges_total),
+        "voids": {
+            "count": len(voids_list),
+            "total": str(voids_total),
+            "items": voids_list,
+        },
+        "vat_breakdown": vat_breakdown,
+    }
+
+    # Comandes obertes: la X les llista, la Z les tanca forçosament.
     open_orders = (
-        db.query(Order)
-        .filter(Order.status.in_(["open", "sent_to_kitchen", "served"]))
-        .all()
+        db.query(Order).filter(Order.status.in_(OPEN_STATUSES)).all()
     )
-    pending_charges = []
-    for o in open_orders:
-        o.status = "pending_payment"
-        o.closed_at = datetime.now()
-        pending_charges.append({
-            "order_id": str(o.id),
-            "total": str(o.total_amount or 0),
-            "ticket_code": o.ticket_code or "",
-        })
-    pending_total = sum((Decimal(p["total"]) for p in pending_charges), Decimal("0"))
+    if close_open:
+        pending_charges = []
+        for o in open_orders:
+            o.status = "pending_payment"
+            o.closed_at = datetime.now()
+            pending_charges.append({
+                "order_id": str(o.id),
+                "total": str(o.total_amount or 0),
+                "ticket_code": o.ticket_code or "",
+            })
+        summary["pending_charges"] = {
+            "count": len(pending_charges),
+            "total": str(sum((Decimal(p["total"]) for p in pending_charges), Decimal("0"))),
+            "items": pending_charges,
+        }
+    else:
+        summary["open_orders"] = {
+            "count": len(open_orders),
+            "items": [
+                {
+                    "order_id": str(o.id),
+                    "total": str(o.total_amount or 0),
+                    "status": o.status,
+                    "ticket_code": o.ticket_code or "",
+                }
+                for o in open_orders
+            ],
+        }
+
+    return summary
+
+
+def preview_day_closure(db: Session, closure_date: date) -> dict:
+    """Informe X (pre-tancament): lectura del dia, sense tancar res.
+
+    Es pot emetre tantes vegades com calgui. NO tanca comandes ni crea
+    `DayClosure`; les comandes obertes surten llistades a `open_orders`.
+    """
+    summary = _compute_summary(db, closure_date, close_open=False)
+    return {"report_type": "X", "closure_date": closure_date.isoformat(), "summary": summary}
+
+
+def run_day_closure(db: Session, closure_date: date) -> DayClosure:
+    """Informe Z (tancament): definitiu i idempotent (una Z per dia)."""
+    existing = (
+        db.query(DayClosure)
+        .filter(DayClosure.closure_date == closure_date)
+        .first()
+    )
+    if existing:
+        return existing
+
+    summary = _compute_summary(db, closure_date, close_open=True)
 
     # Seqüència anual de la Z (independent de la dels tiquets).
     _, z_code = next_ticket_number(db, "Z")
@@ -170,34 +224,9 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
     closure = DayClosure(
         closure_date=closure_date,
         status="completed",
-        total_sales=total_sales,
-        orders_count=orders_count,
-        summary={
-            "z_number": z_code,
-            "gross_sales": str(total_sales),
-            "discounts_total": str(discounts_total),
-            "net_sales": str(total_sales - discounts_total),
-            "payments_by_method": payments_by_method,
-            "payments_total": str(sum(Decimal(v) for v in payments_by_method.values())),
-            "orders_by_type": orders_by_type,
-            "house": {
-                "total": str(house_total),
-                "orders": len(house_orders),
-            },
-            "room_charges": room_charges_list,
-            "room_charges_total": str(room_charges_total),
-            "voids": {
-                "count": len(voids_list),
-                "total": str(voids_total),
-                "items": voids_list,
-            },
-            "pending_charges": {
-                "count": len(pending_charges),
-                "total": str(pending_total),
-                "items": pending_charges,
-            },
-            "vat_breakdown": vat_breakdown,
-        },
+        total_sales=Decimal(summary["gross_sales"]),
+        orders_count=summary["orders_by_type"] and sum(summary["orders_by_type"].values()) or 0,
+        summary={"z_number": z_code, **summary},
         external_id=f"comanda-cierre-{closure_date.isoformat()}",
         emitted_to_pms=False,
         completed_at=datetime.now(timezone.utc),

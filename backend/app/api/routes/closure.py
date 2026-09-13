@@ -15,14 +15,25 @@ from datetime import date
 from ...db import get_db
 from ...models.models import DayClosure
 from ...schemas.schemas import DayClosureOut, DayClosureRunRequest
-from ...services.closure_service import run_day_closure
+from ...services.closure_service import run_day_closure, preview_day_closure
 
 router = APIRouter()
 
 
+@router.post("/x")
+def preview_closure(payload: DayClosureRunRequest, db: Session = Depends(get_db)):
+    """Informe X (pre-tancament): lectura del dia, sense tancar res.
+
+    Es pot emetre tantes vegades com calgui. NO tanca comandes ni crea cap
+    tancament definitiu.
+    """
+    closure_date = payload.closure_date or date.today()
+    return preview_day_closure(db, closure_date)
+
+
 @router.post("/run", response_model=DayClosureOut)
 def run_closure(payload: DayClosureRunRequest, db: Session = Depends(get_db)):
-    """Executa (idempotent) el tancament del dia i el retorna."""
+    """Executa (idempotent) el tancament del dia (la Z) i el retorna."""
     closure_date = payload.closure_date or date.today()
     return run_day_closure(db, closure_date)
 
