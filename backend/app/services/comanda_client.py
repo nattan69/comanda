@@ -5,11 +5,10 @@
 # API key: COMPTA_KEY_COMANDA (X-API-Key) → endpoint /api/v1/intake/comanda.
 #
 # Mapping PGC (ratificat contra el PGC real):
-#   cash → 5700 (caixa)        card → 5730 (pont TPV)       bizum → 5720 (banc)
+#   cash → 570 (caixa)          card → 5730 (pont TPV)       bizum → 5720 (banc)
 #   room_charge → 5730 (pont TPV: el TPV va fer el cobrament, Estada el reconcilia
 #                        al foli del client via 4300 — el 5730 es neteja al consolidat)
-#   ingressos → 7050 (serveis TPV; es refinarà a 7052 menjar / 7050 beguda quan el
-#                    summary desglossi per categoria d'ingrés)
+#   ingressos → 7020 (ventes/restauració del TPV)
 #   IVA repercutit → 4771
 # NOTA: `house` (invitacions) NO es comptabilitza (fora de la Z, no es declara IVA).
 import logging
@@ -20,14 +19,14 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _METHOD_ACCOUNT = {
-    "cash": "5700",
-    "efectiu": "5700",
-    "efectivo": "5700",
-    "card": "5730",
+    "cash": "570",                   # caixa (euros)
+    "efectiu": "570",
+    "efectivo": "570",
+    "card": "5730",                  # pont TPV (targeta)
     "targeta": "5730",
     "tarjeta": "5730",
-    "bizum": "5720",
-    "room_charge": "5730",  # pont TPV (el cobrament va via l'habitació)
+    "bizum": "5720",                 # banc (transferència)
+    "room_charge": "5730",           # pont TPV (el cobrament va via l'habitació)
     "room_charge_extra": "5730",
 }
 
@@ -55,7 +54,7 @@ def envia_cierre_a_compta(
     for v in summary.get("vat_breakdown") or []:
         vat_total += Decimal(str(v.get("tax") or 0))
 
-    # Debit: cobraments per mètode (declarables, house ja exclòs al summary).
+    # Deure (debit): cobraments per mètode (declarables, house ja exclòs al summary).
     debit_total = Decimal("0")
     lines = []
     for method, amount in payments.items():
@@ -73,12 +72,12 @@ def envia_cierre_a_compta(
             "concept": f"Cobraments {m}",
         })
 
-    # Credit: ingressos (base) + IVA repercutit.
+    # Haver: ingressos (base) + IVA repercutit.
     credit_total = Decimal("0")
     if net_sales > 0:
         credit_total += net_sales
         lines.append({
-            "account": "7050",
+            "account": "7020",
             "debit": "0",
             "credit": str(net_sales),
             "concept": "Ingressos TPV (base)",
