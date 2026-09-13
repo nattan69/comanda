@@ -205,6 +205,8 @@ class OrderOut(BaseModel):
     total_amount: float
     discount_amount: float
     notes: Optional[str] = None
+    room_number: Optional[str] = None
+    ticket_code: Optional[str] = None
     opened_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
     items: List[OrderItemOut] = []
@@ -276,4 +278,5 @@ class VoidOut(BaseModel):
     amount: float
     reason: Optional[str] = None
     authorized_by_id: Optional[UUID] = None
+    ticket_code: Optional[str] = None
     authorized_at: Optional[datetime] = None

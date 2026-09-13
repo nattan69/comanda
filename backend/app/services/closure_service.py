@@ -14,6 +14,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..models.models import DayClosure, Order, OrderItem, Payment, Void
+from .ticket_service import next_ticket_number
 
 # Mètodes de pagament que són "venda real" (declarables). `house` (invitació) va a part.
 NON_SALE_METHODS = {"house"}
@@ -146,7 +147,25 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         for rate in sorted(base_map.keys(), key=lambda r: Decimal(r))
     ]
 
-    z_number = db.query(DayClosure).count() + 1
+    # --- Tancament forçat de comandes obertes (queden pendents de cobrament) ---
+    open_orders = (
+        db.query(Order)
+        .filter(Order.status.in_(["open", "sent_to_kitchen", "served"]))
+        .all()
+    )
+    pending_charges = []
+    for o in open_orders:
+        o.status = "pending_payment"
+        o.closed_at = datetime.now()
+        pending_charges.append({
+            "order_id": str(o.id),
+            "total": str(o.total_amount or 0),
+            "ticket_code": o.ticket_code or "",
+        })
+    pending_total = sum((Decimal(p["total"]) for p in pending_charges), Decimal("0"))
+
+    # Seqüència anual de la Z (independent de la dels tiquets).
+    _, z_code = next_ticket_number(db, "Z")
 
     closure = DayClosure(
         closure_date=closure_date,
@@ -154,7 +173,7 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         total_sales=total_sales,
         orders_count=orders_count,
         summary={
-            "z_number": z_number,
+            "z_number": z_code,
             "gross_sales": str(total_sales),
             "discounts_total": str(discounts_total),
             "net_sales": str(total_sales - discounts_total),
@@ -171,6 +190,11 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
                 "count": len(voids_list),
                 "total": str(voids_total),
                 "items": voids_list,
+            },
+            "pending_charges": {
+                "count": len(pending_charges),
+                "total": str(pending_total),
+                "items": pending_charges,
             },
             "vat_breakdown": vat_breakdown,
         },

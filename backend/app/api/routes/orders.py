@@ -8,6 +8,7 @@ from datetime import datetime
 from ...db import get_db
 from ...models.models import Order, OrderItem, MenuItem, Void
 from ...schemas.schemas import OrderCreate, OrderOut, OrderItemCreate, OrderItemOut, VoidCreate, VoidOut
+from ...services.ticket_service import next_ticket_number
 
 router = APIRouter()
 
@@ -35,6 +36,8 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         order_type=payload.order_type,
         notes=payload.notes,
     )
+    # Tiquet de comanda (numeració per tipus COM).
+    _, order.ticket_code = next_ticket_number(db, "COM")
     db.add(order)
     db.flush()  # para obtener order.id
 
@@ -140,6 +143,8 @@ def void_order(order_id: UUID, payload: VoidCreate, db: Session = Depends(get_db
         reason=payload.reason,
         authorized_by_id=payload.authorized_by_id,
     )
+    # Tiquet d'anul·lació (numeració per tipus NUL).
+    _, void.ticket_code = next_ticket_number(db, "NUL")
     db.add(void)
 
     # Si s'anul·la el total (o més), la comanda queda cancel·lada.

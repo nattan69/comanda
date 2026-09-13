@@ -137,6 +137,8 @@ class Order(Base):
     # Càrrec a habitació (room charge): número d'habitació de l'hotel a qui es
     # carrega el consum. Quan és None, el client paga directament al TPV.
     room_number = Column(String)
+    # Codi del tiquet de comanda (numeració per tipus: COM-AAAA-NNNN).
+    ticket_code = Column(String)
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -169,9 +171,11 @@ class Payment(Base):
     __tablename__ = 'payments'
     id = uuid_pk()
     order_id = Column(UUID(as_uuid=True), ForeignKey('orders.id', ondelete='CASCADE'), nullable=False)
-    method = Column(String, nullable=False)  # cash, card, bizum, split
+    method = Column(String, nullable=False)  # cash, card, bizum, split, house, room_charge
     amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String, default='completed')  # pending, completed, refunded, failed
+    # Codi del tiquet de pagament (numeració per tipus: EF/TG/RC/INV-AAAA-NNNN).
+    ticket_code = Column(String)
     paid_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -239,5 +243,25 @@ class Void(Base):
     amount = Column(Numeric(10, 2), nullable=False)  # import anul·lat
     reason = Column(String)  # motiu de l'anul·lació
     authorized_by_id = Column(UUID(as_uuid=True), ForeignKey('staff.id', ondelete='SET NULL'))  # el cap que autoritza
+    # Codi del tiquet d'anul·lació (NUL-AAAA-NNNN).
+    ticket_code = Column(String)
     authorized_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# SEQÜÈNCIES DE TIQUETS (numeració per tipus, anual)
+# ============================================================
+class TicketSequence(Base):
+    """Comptador de numeració de tiquets per tipus i any natural.
+
+    Cada tipus de tiquet (COM, EF, TG, RC, INV, NUL) té la seva pròpia
+    seqüència correlativa, reinicialitzada cada any. La Z té la seva pròpia
+    seqüència anual (tipus `Z`).
+    """
+    __tablename__ = 'ticket_sequences'
+    id = uuid_pk()
+    ticket_type = Column(String, nullable=False)  # COM, EF, TG, RC, INV, NUL, Z
+    year = Column(Integer, nullable=False)
+    counter = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
