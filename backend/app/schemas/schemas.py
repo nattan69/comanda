@@ -190,6 +190,8 @@ class OrderItemOut(OrderItemCreate):
 class OrderCreate(BaseModel):
     table_id: Optional[UUID] = None
     staff_id: Optional[UUID] = None
+    shift_id: Optional[UUID] = None
+    department_id: Optional[UUID] = None
     order_type: str = "dine_in"
     notes: Optional[str] = None
     items: List[OrderItemCreate] = []
@@ -280,3 +282,25 @@ class VoidOut(BaseModel):
     authorized_by_id: Optional[UUID] = None
     ticket_code: Optional[str] = None
     authorized_at: Optional[datetime] = None
+
+
+class ShiftOpen(BaseModel):
+    staff_id: UUID
+    department_id: UUID
+
+
+class ShiftClose(BaseModel):
+    cash_declared: Optional[float] = None
+
+
+class ShiftOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    staff_id: UUID
+    department_id: UUID
+    status: str
+    opened_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
+    cash_declared: Optional[float] = None
+    card_total: Optional[float] = None
+    liquidation: Optional[dict] = None

@@ -129,6 +129,10 @@ class Order(Base):
     id = uuid_pk()
     table_id = Column(UUID(as_uuid=True), ForeignKey('tables.id', ondelete='SET NULL'))
     staff_id = Column(UUID(as_uuid=True), ForeignKey('staff.id', ondelete='SET NULL'))
+    # Torn i departament on s'ha pres la comanda (per la liquidació personal i
+    # la capçalera del tiquet).
+    shift_id = Column(UUID(as_uuid=True), ForeignKey('shifts.id', ondelete='SET NULL'))
+    department_id = Column(UUID(as_uuid=True), ForeignKey('departments.id', ondelete='SET NULL'))
     order_type = Column(String, default='dine_in')  # dine_in, takeaway, delivery
     status = Column(String, default='open')  # open, sent_to_kitchen, served, paid, cancelled
     total_amount = Column(Numeric(10, 2), default=0)
@@ -264,4 +268,44 @@ class TicketSequence(Base):
     ticket_type = Column(String, nullable=False)  # COM, EF, TG, RC, INV, NUL, Z
     year = Column(Integer, nullable=False)
     counter = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# DEPARTAMENTS (punts de venda)
+# ============================================================
+class Department(Base):
+    """Punt de venda on el cambrer es loggeja i fa el seu torn.
+
+    Ex. Menjador "Sa Calobra", Lobby Bar "Formentor", Xibiu "Es Trenc".
+    """
+    __tablename__ = 'departments'
+    id = uuid_pk()
+    name = Column(String, nullable=False)  # "Menjador Sa Calobra", "Lobby Bar Formentor"...
+    center_name = Column(String)  # nom del centre/hotel per a la capçalera fiscal del tiquet
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# TORNS (shift) del cambrer
+# ============================================================
+class Shift(Base):
+    """Torn d'un cambrer dins UN departament.
+
+    Cicle: login (obrir torn) → treball → liquidació personal → logout
+    (tancar torn). Per canviar de departament cal tancar el torn i obrir-ne
+    un altre. La liquidació és personal (per cambrer).
+    """
+    __tablename__ = 'shifts'
+    id = uuid_pk()
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staff.id', ondelete='CASCADE'), nullable=False)
+    department_id = Column(UUID(as_uuid=True), ForeignKey('departments.id', ondelete='CASCADE'), nullable=False)
+    status = Column(String, nullable=False, default='open')  # open, closed
+    opened_at = Column(DateTime(timezone=True), server_default=func.now())
+    closed_at = Column(DateTime(timezone=True))
+    # Liquidació personal (completada al tancar el torn)
+    cash_declared = Column(Numeric(10, 2))  # efectiu que el cambrer declara entregar
+    card_total = Column(Numeric(10, 2))  # total de targetes del torn (calculat pel sistema)
+    liquidation = Column(JSON)  # resum del torn (vendes, pagaments, invitacions, anul·lacions, desquadre)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
