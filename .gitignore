@@ -14,3 +14,5 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+*.db.bak-*
+comanda.db
