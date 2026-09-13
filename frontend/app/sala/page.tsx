@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { api, Table, Area } from '@/lib/api';
+import { useComandaWs, WsBadge } from '@/lib/useComandaWs';
 import { getT, Lang } from '@/lib/i18n';
 import { MapPin } from 'lucide-react';
 
@@ -9,6 +10,12 @@ export default function SalaPage() {
   const t = getT(lang);
   const [tables, setTables] = useState<Table[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+
+  // Temps real (WebSocket): el pla de sala es refresca en viu
+  const wsStatus = useComandaWs({
+    onOrderCreated: () => { api.getTables().then(setTables).catch(() => {}); },
+    onOrderPaid: () => { api.getTables().then(setTables).catch(() => {}); },
+  });
 
   useEffect(() => {
     async function load() {
@@ -21,7 +28,10 @@ export default function SalaPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-3xl font-bold mb-8 text-brand-gold">{t.sala.title}</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-brand-gold">{t.sala.title}</h1>
+        <WsBadge status={wsStatus} />
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {areas.map(area => (
