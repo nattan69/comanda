@@ -225,6 +225,7 @@ class PaymentCreate(BaseModel):
     room_number: Optional[str] = None
     invited_by: Optional[str] = None
     reason: Optional[str] = None
+    card_reference: Optional[str] = None
 
 
 class PaymentRequest(BaseModel):
@@ -235,6 +236,7 @@ class PaymentRequest(BaseModel):
     room_number: Optional[str] = None  # room_charge
     invited_by: Optional[str] = None  # house
     reason: Optional[str] = None  # house
+    card_reference: Optional[str] = None  # card (SoftPOS): referència de la transacció
 
 
 class PaymentOut(PaymentCreate):

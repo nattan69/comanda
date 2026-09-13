@@ -272,6 +272,7 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
         room_number=payload.room_number,
         invited_by=payload.invited_by,
         reason=payload.reason,
+        card_reference=payload.card_reference,
     )
     db.add(payment)
 

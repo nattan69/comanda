@@ -190,6 +190,8 @@ class Payment(Base):
     # Invitació (house): qui convida i per quin motiu.
     invited_by = Column(String)  # Direcció, Central, Comercial, Att. clients, Personal...
     reason = Column(String)  # motiu de la invitació (o de l'anul·lació)
+    # SoftPOS (targeta): referència de la transacció del banc per conciliar.
+    card_reference = Column(String)  # ex. ID/autorització del TPV virtual
     paid_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
