@@ -191,7 +191,7 @@ class OrderCreate(BaseModel):
     table_id: Optional[UUID] = None
     staff_id: Optional[UUID] = None
     shift_id: Optional[UUID] = None
-    department_id: Optional[UUID] = None
+    center_id: Optional[UUID] = None
     order_type: str = "dine_in"
     notes: Optional[str] = None
     items: List[OrderItemCreate] = []
@@ -286,7 +286,7 @@ class VoidOut(BaseModel):
 
 class ShiftOpen(BaseModel):
     staff_id: UUID
-    department_id: UUID
+    center_id: UUID
 
 
 class ShiftClose(BaseModel):
@@ -297,7 +297,7 @@ class ShiftOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     staff_id: UUID
-    department_id: UUID
+    center_id: UUID
     status: str
     opened_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None

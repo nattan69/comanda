@@ -13,9 +13,9 @@ router = APIRouter()
 
 @router.post("/open", response_model=ShiftOut, status_code=status.HTTP_201_CREATED)
 def login_shift(payload: ShiftOpen, db: Session = Depends(get_db)):
-    """Login del cambrer dins un departament: obre un torn nou."""
+    """Login del cambrer dins un centre: obre un torn nou."""
     try:
-        return open_shift(db, payload.staff_id, payload.department_id)
+        return open_shift(db, payload.staff_id, payload.center_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

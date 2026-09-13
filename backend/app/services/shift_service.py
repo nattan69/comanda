@@ -61,8 +61,8 @@ def _shift_summary(db: Session, shift: Shift) -> dict:
     }
 
 
-def open_shift(db: Session, staff_id, department_id) -> Shift:
-    """Login: obre un torn per al cambrer dins el departament."""
+def open_shift(db: Session, staff_id, center_id) -> Shift:
+    """Login: obre un torn per al cambrer dins el centre."""
     existing = (
         db.query(Shift)
         .filter(Shift.staff_id == staff_id, Shift.status == "open")
@@ -70,7 +70,7 @@ def open_shift(db: Session, staff_id, department_id) -> Shift:
     )
     if existing:
         raise ValueError("El cambrer ja té un torn obert (ha de fer logout abans).")
-    shift = Shift(staff_id=staff_id, department_id=department_id, status="open")
+    shift = Shift(staff_id=staff_id, center_id=center_id, status="open")
     db.add(shift)
     db.commit()
     db.refresh(shift)
@@ -86,7 +86,7 @@ def preview_shift(db: Session, shift_id) -> dict:
         "report_type": "X-shift",
         "shift_id": str(shift.id),
         "staff_id": str(shift.staff_id),
-        "department_id": str(shift.department_id),
+        "center_id": str(shift.center_id),
         "status": shift.status,
         "summary": _shift_summary(db, shift),
     }

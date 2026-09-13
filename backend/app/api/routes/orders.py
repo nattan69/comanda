@@ -34,7 +34,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         table_id=payload.table_id,
         staff_id=payload.staff_id,
         shift_id=payload.shift_id,
-        department_id=payload.department_id,
+        center_id=payload.center_id,
         order_type=payload.order_type,
         notes=payload.notes,
     )

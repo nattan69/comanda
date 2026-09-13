@@ -129,10 +129,10 @@ class Order(Base):
     id = uuid_pk()
     table_id = Column(UUID(as_uuid=True), ForeignKey('tables.id', ondelete='SET NULL'))
     staff_id = Column(UUID(as_uuid=True), ForeignKey('staff.id', ondelete='SET NULL'))
-    # Torn i departament on s'ha pres la comanda (per la liquidació personal i
-    # la capçalera del tiquet).
+    # Torn i centre on s'ha pres la comanda (per la liquidació personal i la
+    # capçalera del tiquet).
     shift_id = Column(UUID(as_uuid=True), ForeignKey('shifts.id', ondelete='SET NULL'))
-    department_id = Column(UUID(as_uuid=True), ForeignKey('departments.id', ondelete='SET NULL'))
+    center_id = Column(UUID(as_uuid=True), ForeignKey('centers.id', ondelete='SET NULL'))
     order_type = Column(String, default='dine_in')  # dine_in, takeaway, delivery
     status = Column(String, default='open')  # open, sent_to_kitchen, served, paid, cancelled
     total_amount = Column(Numeric(10, 2), default=0)
@@ -272,17 +272,42 @@ class TicketSequence(Base):
 
 
 # ============================================================
-# DEPARTAMENTS (punts de venda)
+# ESTABLIMENT (empresa/hotel) — dades fiscals
 # ============================================================
-class Department(Base):
-    """Punt de venda on el cambrer es loggeja i fa el seu torn.
+class Establishment(Base):
+    """L'establiment (empresa/hotel): dades fiscals per a la capçalera del tiquet.
+
+    Ex. Hotel Sa Ràpita ****, Conceptes Hotels, Carrer llarg 25, 07000 Campos,
+    NIF A07100324.
+    """
+    __tablename__ = 'establishments'
+    id = uuid_pk()
+    name = Column(String, nullable=False)  # nom comercial: "Hotel Sa Ràpita"
+    legal_name = Column(String)  # raó social: "Conceptes Hotels"
+    category = Column(String)  # categoria/estrelles: "****"
+    address = Column(String)  # "Carrer llarg, 25"
+    city = Column(String)  # "Campos"
+    province = Column(String)  # "Illes Balears"
+    postal_code = Column(String)  # "07000"
+    nif = Column(String)  # "A07100324"
+    phone = Column(String)
+    email = Column(String)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# CENTRES (punts de venda) dins un establiment
+# ============================================================
+class Center(Base):
+    """Centre (punt de venda) dins un establiment, on el cambrer es loggeja.
 
     Ex. Menjador "Sa Calobra", Lobby Bar "Formentor", Xibiu "Es Trenc".
     """
-    __tablename__ = 'departments'
+    __tablename__ = 'centers'
     id = uuid_pk()
     name = Column(String, nullable=False)  # "Menjador Sa Calobra", "Lobby Bar Formentor"...
-    center_name = Column(String)  # nom del centre/hotel per a la capçalera fiscal del tiquet
+    establishment_id = Column(UUID(as_uuid=True), ForeignKey('establishments.id', ondelete='CASCADE'), nullable=False)
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -300,7 +325,7 @@ class Shift(Base):
     __tablename__ = 'shifts'
     id = uuid_pk()
     staff_id = Column(UUID(as_uuid=True), ForeignKey('staff.id', ondelete='CASCADE'), nullable=False)
-    department_id = Column(UUID(as_uuid=True), ForeignKey('departments.id', ondelete='CASCADE'), nullable=False)
+    center_id = Column(UUID(as_uuid=True), ForeignKey('centers.id', ondelete='CASCADE'), nullable=False)
     status = Column(String, nullable=False, default='open')  # open, closed
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True))
