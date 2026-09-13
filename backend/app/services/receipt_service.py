@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Session
 
-from ..models.models import Center, Establishment, Order, Payment, Staff, Table
+from ..models.models import Center, Establishment, Order, Payment, Staff, Table, Void
 
 # Amplada de la impressora tèrmica (80 mm ≈ 42 caràcters).
 LINE_WIDTH = 42
@@ -117,6 +117,28 @@ def build_payment_receipt(db: Session, payment_id) -> dict:
     return receipt
 
 
+def build_void_receipt(db: Session, void_id) -> dict:
+    """Tiquet d'anul·lació: el tiquet original marcat «ANUL·LAT» + motiu.
+
+    Es genera per adjuntar amb l'original (que queda barrat en diagonal) quan
+    un cap autoritza una anul·lació.
+    """
+    void = db.get(Void, void_id)
+    if not void:
+        raise ValueError("Anul·lació no trobada.")
+
+    receipt = build_receipt(db, void.order_id)
+    receipt["type"] = "void"
+    receipt["mark"] = "void"
+    receipt["void"] = {
+        "ticket_code": void.ticket_code or "",
+        "amount": str(void.amount),
+        "reason": void.reason or "",
+        "authorized_by_id": str(void.authorized_by_id) if void.authorized_by_id else None,
+    }
+    return receipt
+
+
 def _center(text: str) -> str:
     return text.center(LINE_WIDTH).rstrip()
 
@@ -165,6 +187,15 @@ def render_receipt_text(receipt: dict) -> str:
     if center and center.get("name"):
         out.append(_center(f'Centre: {center["name"]}'))
     out.append(sep)
+
+    # Marca ben visible (anul·lat / còpia)
+    mark = receipt.get("mark")
+    if mark == "void":
+        out.append(_center("*** ANUL·LAT ***"))
+        out.append("")
+    elif mark == "copy":
+        out.append(_center("*** CÒPIA ***"))
+        out.append("")
 
     # Identificació del tiquet
     code = (payment.get("ticket_code") or receipt.get("ticket_code") or "")
@@ -219,6 +250,13 @@ def render_receipt_text(receipt: dict) -> str:
             out.append(_center(f"Import: {amount} €"))
         if payment.get("signature_required"):
             out.append(_signature_box())
+
+    # Informació de l'anul·lació (si n'hi ha)
+    void_info = receipt.get("void")
+    if void_info:
+        out.append(sep)
+        out.append(_center(f"ANUL·LACIÓ: {_money(void_info.get('amount', '0'))} €"))
+        out.append(_center(f"Motiu: {void_info.get('reason') or '-'}"))
 
     out.append(sep)
     out.append(_center("Gràcies per la seva visita"))

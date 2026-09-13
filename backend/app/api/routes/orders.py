@@ -20,7 +20,12 @@ from ...schemas.schemas import (
     PaymentOut,
 )
 from ...services.ticket_service import next_ticket_number
-from ...services.receipt_service import build_receipt, build_payment_receipt, render_receipt_text
+from ...services.receipt_service import (
+    build_receipt,
+    build_payment_receipt,
+    build_void_receipt,
+    render_receipt_text,
+)
 
 router = APIRouter()
 
@@ -176,12 +181,14 @@ def get_ticket(
     order_id: UUID,
     format: str = "json",
     payment_id: Optional[UUID] = None,
+    copy: bool = False,
     db: Session = Depends(get_db),
 ):
     """Retorna el tiquet de la comanda (capçalera + línies agrupades + total).
 
     Si es passa `payment_id`, retorna el tiquet de pagament (amb el mètode,
     habitació/convidat/motiu i requadre de signatura si cal).
+    Si `copy=true`, el tiquet surt marcat com a «CÒPIA» (reimpressió).
     `format=json` retorna el tiquet estructurat; `format=text` el renderitza en
     text pla per a impressora tèrmica de 80 mm.
     """
@@ -191,6 +198,27 @@ def get_ticket(
             if payment_id
             else build_receipt(db, order_id)
         )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if copy:
+        receipt["mark"] = "copy"
+
+    if format == "text":
+        return PlainTextResponse(render_receipt_text(receipt))
+    return receipt
+
+
+@router.get("/{order_id}/void/{void_id}/ticket")
+def get_void_ticket(
+    order_id: UUID,
+    void_id: UUID,
+    format: str = "json",
+    db: Session = Depends(get_db),
+):
+    """Retorna el tiquet d'anul·lació (l'original marcat «ANUL·LAT» + motiu)."""
+    try:
+        receipt = build_void_receipt(db, void_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
