@@ -709,6 +709,49 @@ pms_posted_at = Column(DateTime(timezone=True), nullable=True)
 
 ---
 
+## 15. Registre de moviments entre centres (ampliació 14/09/2026)
+
+> **Decisió (Tomeu, 14/09):** Si el cambrer fitxa amb Jornada, Jornada és la
+> font de veritat del **registre de moviments**: qui està de servei, **en quin
+> centre** (punt de venda) i des de quan. Comanda rep aquests fitxatges i els
+> reflecteix — no duplica el fitxatge.
+
+### 15.1. El centre al fitxatge
+
+El `FichajeCreate` porta un camp nou `center_external_id` (el `center_id` de
+Jornada). Comanda el resol contra `Center.external_id` i el desa al
+`FichajeEvent.center_id`. Així un fitxatge d'entrada al Menjador "Sa Calobra"
+diu "Pere ha entrat a Sa Calobra"; un fitxatge posterior al Lobby Bar
+"Formentor" és el **moviment entre centres**.
+
+```
+Pep clock_in  → Menjador "Sa Calobra"   → Comanda: Pep està a Sa Calobra
+Pep clock_in  → Lobby Bar "Formentor"   → Comanda: Pep s'ha mogut a Formentor
+Pep clock_out → (fora de servei)         → Comanda: Pep ja no hi és
+```
+
+### 15.2. Canvis respecte al disseny inicial
+
+- **`Center`** guanya `external_id` + `source` (com `Staff`), per poder-hi
+  referenciar des de Jornada.
+- **`FichajeEvent`** guanya `center_id` (FK a `centers`, nullable).
+- **Nou endpoint** `POST /integrations/centers-sync`: sincronitza centres de
+  Jornada (idempotent per `external_id` + `source='jornada'`).
+- **Derivació del torn** (`Shift`): un `clock_in` amb centre obre el torn del
+  cambrer en aquell centre (si no n'hi ha cap d'obert); un `clock_out` el tanca.
+  La **liquidació de caixa** es fa a part, al TPV — no al fitxatge.
+
+### 15.3. Separació de conceptes (clau)
+
+| Sistema | Responsabilitat |
+|---|---|
+| **Jornada** | Fitxatges laborals: *qui*, *en quin centre*, *quan* (registre de moviments) |
+| **Comanda** | Vendes i caixa: *què* ha venut, *quant* efectiu ha de liquidar |
+
+Jornada no sap de vendes ni efectiu; Comanda no duplica el fitxatge.
+
+---
+
 _Aquest document es una guia d'implementacio. Totes les decisions estan
 resoltes (en Tomeu, 06/09/2026). Llest per implementar.
 Codis i noms de camps en castella per convenio del projecte._

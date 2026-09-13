@@ -6,7 +6,8 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
 
     # Seguridad
-    API_KEY: str = ""
+    API_KEY: str = ""  # clau genèrica (Ariadna)
+    JORNADA_API_KEY: str = ""  # clau pròpia de la integració Jornada
     DEBUG: bool = False
 
     # VeriFactu (cumplimiento fiscal)

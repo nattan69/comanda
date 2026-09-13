@@ -21,6 +21,10 @@ class Staff(Base):
     phone = Column(String)
     role = Column(String, nullable=False)  # admin, manager, waiter, kitchen, bar
     pin = Column(String)  # PIN de acceso rápido al TPV (hash en producción)
+    # --- Integració amb Jornada ---
+    external_id = Column(String, index=True)  # empleado_id a Jornada
+    source = Column(String, default='manual')  # manual, jornada
+    shift_status = Column(String, default='off_shift')  # off_shift, on_shift, break
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -308,6 +312,9 @@ class Center(Base):
     id = uuid_pk()
     name = Column(String, nullable=False)  # "Menjador Sa Calobra", "Lobby Bar Formentor"...
     establishment_id = Column(UUID(as_uuid=True), ForeignKey('establishments.id', ondelete='CASCADE'), nullable=False)
+    # --- Integració amb Jornada ---
+    external_id = Column(String, index=True)  # center_id a Jornada
+    source = Column(String, default='manual')  # manual, jornada
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -333,4 +340,26 @@ class Shift(Base):
     cash_declared = Column(Numeric(10, 2))  # efectiu que el cambrer declara entregar
     card_total = Column(Numeric(10, 2))  # total de targetes del torn (calculat pel sistema)
     liquidation = Column(JSON)  # resum del torn (vendes, pagaments, invitacions, anul·lacions, desquadre)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ============================================================
+# FITXATGES (esdeveniments rebuts de Jornada)
+# ============================================================
+class FichajeEvent(Base):
+    """Esdeveniment de fitxatge rebut de Jornada (control horari).
+
+    És un log d'events — l'estat actual (`shift_status` del Staff) es deriva de
+    l'últim event. Porta el centre on s'ha fitxat perquè Comanda sàpiga en quin
+    punt de venda està cada cambrer (registre de moviments entre centres).
+    """
+    __tablename__ = 'fichaje_events'
+    id = uuid_pk()
+    staff_id = Column(UUID(as_uuid=True), ForeignKey('staff.id', ondelete='CASCADE'), nullable=False)
+    external_id = Column(String, index=True)  # ID del fichaje a Jornada — idempotencia
+    event_type = Column(String, nullable=False)  # clock_in, clock_out, break_start, break_end
+    center_id = Column(UUID(as_uuid=True), ForeignKey('centers.id', ondelete='SET NULL'))  # centre on s'ha fitxat
+    timestamp = Column(DateTime(timezone=True), nullable=False)  # quan va passar a Jornada
+    device = Column(String)  # dispositiu des del que es va fitxar
+    source = Column(String, default='jornada')
     created_at = Column(DateTime(timezone=True), server_default=func.now())

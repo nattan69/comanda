@@ -304,3 +304,76 @@ class ShiftOut(BaseModel):
     cash_declared: Optional[float] = None
     card_total: Optional[float] = None
     liquidation: Optional[dict] = None
+
+
+# ============================================================
+# INTEGRACIÓ JORNADA
+# ============================================================
+class StaffSyncCreate(BaseModel):
+    external_id: str
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: str = "waiter"
+    is_active: bool = True
+
+
+class StaffSyncOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: str
+    pin: Optional[str] = None
+    is_active: bool
+    external_id: Optional[str] = None
+    source: str = "manual"
+    shift_status: str = "off_shift"
+
+
+class CenterSyncCreate(BaseModel):
+    external_id: str
+    name: str
+    establishment_id: UUID
+
+
+class CenterSyncOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    establishment_id: UUID
+    external_id: Optional[str] = None
+    source: str = "manual"
+    active: bool
+
+
+class FichajeCreate(BaseModel):
+    external_id: str
+    staff_external_id: str
+    event_type: str  # clock_in, clock_out, break_start, break_end
+    center_external_id: Optional[str] = None  # centre on s'ha fitxat (moviments entre centres)
+    timestamp: datetime
+    device: Optional[str] = None
+
+
+class FichajeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    staff_id: UUID
+    external_id: str
+    event_type: str
+    center_id: Optional[UUID] = None
+    timestamp: datetime
+    device: Optional[str] = None
+    source: str
+    created_at: Optional[datetime] = None
+
+
+class ShiftSummary(BaseModel):
+    staff_id: UUID
+    full_name: str
+    external_id: Optional[str] = None
+    shift_status: str
+    center_id: Optional[UUID] = None
+    last_event: Optional[dict] = None
