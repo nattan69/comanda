@@ -283,11 +283,25 @@ export const api = {
     items: { menu_item_id: string; quantity: number }[];
     notes?: string;
     order_type?: string;
+    /** Cambrer que pren la comanda (va al tiquet de cuina per si cal aclarir res). */
+    staff_id?: string | null;
+    center_id?: string | null;
+    /** Ronda del compte de la taula (1, 2, 3...) — la calcula el backend. */
+    comanda_number?: number;
   }): Promise<Order> {
+    // El CAMBRER s'adjunta sempre que el tinguem: és qui ha pres la comanda i
+    // qui pot aclarir qualsevol cosa a la cuina (decisió Tomeu 14/09/2026).
+    const staff = getStoredStaff();
+    const cos = { ...payload };
+    if (!cos.staff_id && staff?.id) cos.staff_id = staff.id;
+    if (!cos.center_id) {
+      const c = typeof window !== 'undefined' ? localStorage.getItem('comanda-centre') : null;
+      if (c) cos.center_id = c;
+    }
     return apiRequest<Order>('/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(cos),
     });
   },
   async addItems(orderId: string, items: { menu_item_id: string; quantity: number }[]): Promise<Order> {

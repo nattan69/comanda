@@ -95,6 +95,12 @@ export default function Kds() {
                     {nomCentre(c.centre) && (
                       <div className="text-xs mt-1" style={{ color: '#9aa7b8' }}>{nomCentre(c.centre)}</div>
                     )}
+                    {/* Cambrer: per si la cuina ha d'aclarir alguna cosa (Tomeu 14/09/2026) */}
+                    {c.staff_name && (
+                      <div className="text-xs mt-0.5" style={{ color: '#e2b04a' }}>
+                        👤 {c.staff_name}
+                      </div>
+                    )}
                   </div>
                   <div className="text-2xl font-bold" style={{ color: colorTemps(min) }}>
                     {min}′

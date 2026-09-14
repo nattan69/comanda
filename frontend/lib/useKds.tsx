@@ -26,6 +26,8 @@ export type ComandaCuina = {
   centre?: string | null;
   table_number?: string | number | null;
   comanda_number?: number;
+  //: Cambrer que ha pres la comanda — per si la cuina ha d'aclarir alguna cosa.
+  staff_name?: string | null;
 };
 
 const CLAU = 'kds-cua';
@@ -80,6 +82,7 @@ export function useKds() {
       centre: ev.payload.center_id ?? null,
       table_number: ev.payload.table_number ?? null,
       comanda_number: ev.payload.comanda_number,
+      staff_name: ev.payload.staff_name ?? null,
     };
     setCua((c) => [...c, entrada]);
 

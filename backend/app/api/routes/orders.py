@@ -159,6 +159,9 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
     taula = db.get(Table, order.table_id) if order.table_id else None
     centre = db.get(Center, order.center_id) if order.center_id else None
     cambrer = db.get(Staff, order.staff_id) if order.staff_id else None
+    # El CAMBRER és qui pot aclarir qualsevol cosa a la cuina (decisió Tomeu
+    # 14/09/2026): sempre que el tinguem, va a l'esdeveniment i al tiquet.
+    # Deixem `staff_id` i `staff_name` explícits perquè el KDS els mostri.
     emit_sync("order.created", {
         "order_id": str(order.id),
         "ticket_code": order.ticket_code,
@@ -166,6 +169,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         "table_number": taula.number if taula else None,
         "center_id": str(order.center_id) if order.center_id else None,
         "center_name": centre.name if centre else None,
+        "staff_id": str(order.staff_id) if order.staff_id else None,
         "staff_name": cambrer.full_name if cambrer else None,
         "total_amount": str(order.total_amount or 0),
         "comanda_number": int(getattr(order, "comanda_number", 1) or 1),
