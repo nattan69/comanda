@@ -180,6 +180,65 @@ def get_table(table_id: UUID, db: Session = Depends(get_db)):
     return _amb_saldo(db, [table])[0]
 
 
+@router.get("/{table_id}/compte")
+def get_compte_de_taula(table_id: UUID, db: Session = Depends(get_db)):
+    """COMPTE COMPLET d'una taula: TOTES les comandes obertes (no només una).
+
+    Per què: quan es reparteixen línies a una altra comanda per fer TIQUETS
+    SEPARATS (compartir el compte), a la taula hi ha MÉS D'UNA comanda oberta.
+    L'endpoint /comanda retornava només la més recent i les altres desapareixien
+    de la vista (catch 15/09/2026, reportat per Tomeu).
+
+    Retorna: { table_id, open, total_pendent, comandes: [ {id, comanda_number,
+              total, pendent, lines[], payments[]} ] }
+    """
+    from ...models.models import Order, OrderItem, MenuItem, Payment
+
+    ordres = (
+        db.query(Order)
+        .filter(Order.table_id == table_id, Order.status.notin_(["paid", "cancelled", "closed"]))
+        .order_by(Order.comanda_number, Order.created_at)
+        .all()
+    )
+    if not ordres:
+        return {"table_id": str(table_id), "open": False, "total_pendent": 0.0, "comandes": []}
+
+    def _linies(order):
+        out = []
+        for it in db.query(OrderItem).filter(OrderItem.order_id == order.id).all():
+            art = db.get(MenuItem, it.menu_item_id) if it.menu_item_id else None
+            out.append({
+                "id": str(it.id),
+                "menu_item_id": str(it.menu_item_id) if it.menu_item_id else None,
+                "name": it.name_snapshot or (art.name if art else "—"),
+                "quantity": float(it.quantity),
+                "unit_price": float(it.price_snapshot or 0),
+                "amount": float((it.price_snapshot or 0) * it.quantity),
+                "vat_rate": float(art.vat_rate) if art and art.vat_rate is not None else None,
+                "status": it.status,
+                "modifications": it.modifications or [],
+                "comanda_number": it.comanda_number,
+            })
+        return out
+
+    comandes = []
+    total_pendent = 0.0
+    for o in ordres:
+        pagat = sum(float(p.amount or 0) for p in db.query(Payment).filter(Payment.order_id == o.id).all())
+        pend = float(o.total_amount or 0) - pagat
+        total_pendent += pend
+        comandes.append({
+            "id": str(o.id),
+            "comanda_number": o.comanda_number,
+            "status": o.status,
+            "total": float(o.total_amount or 0),
+            "paid_amount": pagat,
+            "pending_amount": pend,
+            "lines": _linies(o),
+        })
+    return {"table_id": str(table_id), "open": True, "total_pendent": total_pendent, "comandes": comandes}
+
+
 @router.get("/{table_id}/comanda")
 def get_comanda_de_taula(table_id: UUID, db: Session = Depends(get_db)):
     """Desglossament de la comanda oberta d'una taula (per al modal de fitxa).

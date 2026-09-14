@@ -611,8 +611,19 @@ def moure_linies(order_id: UUID, payload: MouLiniesPayload, db: Session = Depend
             center_id=origen.center_id,
             order_type=origen.order_type,
             notes=payload.nota or f"Divisió de {origen.ticket_code or 'comanda'}",
-            #: mateixa ronda que l'origen: és una divisió del MATEIX compte
-            comanda_number=int(getattr(origen, "comanda_number", 1) or 1),
+            #: La divisió neix amb un número PROPI (el següent del compte) perquè
+            #: els tiquets es puguin distingir a la pantalla i al paper. Si fos el
+            #: mateix número, dues comandes del mateix compte sortirien "nº1" i
+            #: "nº1" (catch 15/09/2026).
+            comanda_number=(
+                db.query(func.max(Order.comanda_number))
+                .filter(
+                    Order.table_id == origen.table_id,
+                    Order.status.notin_(["paid", "cancelled", "closed"]),
+                )
+                .scalar()
+                or 0
+            ) + 1,
         )
         # sense tiquet: la divisió neix sense número; s'assignarà en cobrar
         db.add(desti)

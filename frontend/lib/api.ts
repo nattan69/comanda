@@ -461,6 +461,25 @@ export const apiRoom = {
 // PLA DE SALA (decisió Tomeu 14/09/2026)
 // ============================================================
 export const apiTable = {
+  /**
+   * COMPTE COMPLET de la taula: TOTES les comandes obertes (no només una).
+   * Quan es reparteixen línies a una altra comanda per fer tiquets separats,
+   * a la taula hi ha més d'una comanda oberta.
+   */
+  async getCompte(tableId: string): Promise<CompteTaula> {
+    return apiRequest<CompteTaula>(`/tables/${tableId}/compte`);
+  },
+  /**
+   * COMPARTIR EL COMPTE: mou línies d'una comanda a una altra (o a una de nova)
+   * per fer TIQUETS SEPARATS i cobrar-los per separat (decisió Tomeu 14/09/2026).
+   * Sense `destiOrderId` es crea una comanda nova a la mateixa taula.
+   */
+  async moureLinies(orderId: string, lineIds: string[], destiOrderId?: string) {
+    return apiRequest(`/orders/${orderId}/moure-linies`, {
+      method: 'POST',
+      body: JSON.stringify({ line_ids: lineIds, desti_order_id: destiOrderId || null }),
+    });
+  },
   /** Desglossament de la comanda oberta d'una taula (per al modal). */
   async getComanda(tableId: string): Promise<TableComanda> {
     return apiRequest<TableComanda>(`/tables/${tableId}/comanda`);
@@ -533,6 +552,25 @@ export const apiTable = {
   },
 };
 
+
+/** Una comanda dins del compte d'una taula (pot haver-n'hi diverses si s'ha dividit). */
+export type ComandaDelCompte = {
+  id: string;
+  comanda_number: number;
+  status: string;
+  total: number;
+  paid_amount: number;
+  pending_amount: number;
+  lines: TableComanda['lines'];
+};
+
+/** COMPTE d'una taula amb totes les comandes obertes. */
+export type CompteTaula = {
+  table_id: string;
+  open: boolean;
+  total_pendent: number;
+  comandes: ComandaDelCompte[];
+};
 
 /** Cambrer logueat amb el saldo pendent de les seves taules (frame de dalt). */
 export type CambrerPanell = {

@@ -165,15 +165,8 @@ export default function SalaPage() {
         <ModalTaula
           tableId={taulaOberta.id}
           tableNumber={String(taulaOberta.number)}
-          comanda={comanda || {
-            table_id: taulaOberta.id, open: false, total_amount: 0,
-            discount_amount: 0, paid_amount: 0, pending_amount: 0, lines: [], payments: [],
-          }}
           onTancar={tancarModal}
-          onRefresca={async () => {
-            await refresca();
-            try { setComanda(await apiTable.getComanda(taulaOberta.id)); } catch { /* */ }
-          }}
+          onRefresca={() => { void refresca(); }}
           onCobrar={(orderId) => {
             const t = comanda?.pending_amount ?? 0;
             tancarModal();
