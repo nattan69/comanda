@@ -91,6 +91,7 @@ class TableCreate(TableBase):
 
 class TableUpdate(BaseModel):
     area_id: Optional[UUID] = None
+    center_id: Optional[UUID] = None
     number: Optional[str] = None
     seats: Optional[int] = None
     position_x: Optional[int] = None
