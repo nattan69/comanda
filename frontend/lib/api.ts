@@ -16,6 +16,7 @@ export type Area = {
   position_y: number;
   surcharge_percent?: number | string;
   center_id?: string;
+  table_count?: number;
 };
 
 /** Taula del pla de sala: posició REAL, forma, estat i saldo pendent. */
@@ -489,6 +490,11 @@ export const apiTable = {
   /** Esborra una taula. */
   async deleteTable(tableId: string): Promise<void> {
     return apiRequest<void>(`/tables/${tableId}`, { method: 'DELETE' });
+  },
+  /** Àrees (zones) del pla de sala, filtrat per centre. */
+  async getAreas(centerId?: string): Promise<Area[]> {
+    const q = centerId ? `?center_id=${encodeURIComponent(centerId)}` : '';
+    return apiRequest<Area[]>(`/tables/areas${q}`);
   },
   /** Canvia la quantitat d'una línia de comanda. */
   async updateLine(orderId: string, lineId: string, quantity: number) {
