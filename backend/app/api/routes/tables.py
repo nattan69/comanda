@@ -1,5 +1,6 @@
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -84,6 +85,32 @@ def _amb_saldo(db: Session, taules: list) -> list:
             d["paid_amount"] = float(info["paid"])
         resultat.append(d)
     return resultat
+
+
+class AreaUpdate(BaseModel):
+    """Actualització parcial d'una àrea."""
+    name: Optional[str] = None
+    center_id: Optional[UUID] = None
+    position_x: Optional[int] = None
+    position_y: Optional[int] = None
+    surcharge_percent: Optional[float] = None
+
+
+@router.patch("/areas/{area_id}", response_model=AreaOut)
+def update_area(area_id: UUID, payload: AreaUpdate, db: Session = Depends(get_db)):
+    """Modifica una àrea (nom, CENTRE al qual pertany, posició, recàrrec).
+
+    Serveix per ASSIGNAR una àrea a un centre/departament — imprescindible perquè
+    el pla de sala és per centre (decisió Tomeu 14/09/2026).
+    """
+    area = db.get(Area, area_id)
+    if not area:
+        raise HTTPException(status_code=404, detail="Àrea no trobada")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(area, k, v)
+    db.commit()
+    db.refresh(area)
+    return area
 
 
 @router.get("", response_model=List[TableOut])
