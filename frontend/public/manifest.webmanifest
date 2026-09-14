@@ -1,0 +1,20 @@
+{
+  "name": "Comandera — Conceptes",
+  "short_name": "Comandera",
+  "description": "L'app dels cambrers: login PIN, prendre comandes, cobrar i imprimir des del mòbil o PDA.",
+  "start_url": "/comandera",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "lang": "ca",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Sala", "url": "/comandera/sala" },
+    { "name": "El meu torn", "url": "/comandera/torn" }
+  ]
+}
