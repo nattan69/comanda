@@ -80,7 +80,24 @@ def main():
             sense.append(it.get("name"))
             continue
         try:
-            req("PATCH", f"/menu/items/{it['id']}", {"center_id": desti}, token=token)
+            # ⚠️ El PATCH de Comanda usa MenuItemCreate (substitució COMPLETA, no parcial):
+            # cal enviar tots els camps o dona 422 "Field required: name". Enviem la fitxa sencera
+            # amb el center_id canviat.
+            cos = {
+                "name": it.get("name"),
+                "price": it.get("price"),
+                "category_id": it.get("category_id"),
+                "income_category_id": it.get("income_category_id"),
+                "family_id": it.get("family_id"),
+                "center_id": desti,
+                "description": it.get("description"),
+                "vat_rate": it.get("vat_rate", 10.0),
+                "kitchen_station": it.get("kitchen_station", "main"),
+                "allergens": it.get("allergens"),
+                "is_available": it.get("is_available", True),
+                "is_active": it.get("is_active", True),
+            }
+            req("PATCH", f"/menu/items/{it['id']}", cos, token=token)
             lligats += 1
         except urllib.error.HTTPError as e:
             print(f"   ⚠️ {it.get('name')}: HTTP {e.code} {e.read().decode()[:70]}")
