@@ -61,8 +61,23 @@ def _compute_summary(db: Session, closure_date: date, close_open: bool) -> dict:
         ).all()
     }
 
+    # NULS: es detallen (nº de tiquet + import) i es totalitzen, com demana
+    # en Tomeu (decisió 14/09/2026). Van a part de les invitacions.
+    nul_order_ids = {
+        p.order_id
+        for p in db.query(Payment).filter(
+            Payment.method.in_(["anul", "null"]),
+            Payment.status == "completed",
+            Payment.paid_at >= start,
+            Payment.paid_at < end,
+        ).all()
+    }
+    # Invitacions = no-venda que NO són nuls
+    house_only_ids = house_order_ids - nul_order_ids
+
     declarable_orders = [o for o in orders if o.id not in house_order_ids]
-    house_orders = [o for o in orders if o.id in house_order_ids]
+    house_orders = [o for o in orders if o.id in house_only_ids]
+    nul_orders = [o for o in orders if o.id in nul_order_ids]
 
     total_sales = sum((Decimal(str(o.total_amount or 0)) for o in declarable_orders), Decimal("0"))
     house_total = sum((Decimal(str(o.total_amount or 0)) for o in house_orders), Decimal("0"))
@@ -143,6 +158,28 @@ def _compute_summary(db: Session, closure_date: date, close_open: bool) -> dict:
         for rate in sorted(base_map.keys(), key=lambda r: Decimal(r))
     ]
 
+    # === DETALL DELS NULS (nº tiquet + import) ===
+    nuls_list = [
+        {
+            "order_id": str(o.id),
+            "ticket_code": o.ticket_code or "",
+            "amount": str(o.total_amount or 0),
+        }
+        for o in nul_orders
+    ]
+    nuls_total = sum((Decimal(str(o.total_amount or 0)) for o in nul_orders), Decimal("0"))
+
+    # === TOTAL GENERAL DESGLOSSAT per famílies de producte ===
+    # Begudes / Menjars / Varis (drogueria, perfumeria, amenities...) — pensat
+    # sobretot per Recepció i Minimarket, que venen molt de «varis».
+    # Engloba TOTS els mètodes de cobrament (efectiu, càrrec habitació, targeta).
+    families: dict[str, Decimal] = {"begudes": Decimal("0"), "menjars": Decimal("0"), "varis": Decimal("0")}
+    if order_ids:
+        for it in db.query(OrderItem).filter(OrderItem.order_id.in_(order_ids)).all():
+            importe = Decimal(str(it.price_snapshot or 0)) * Decimal(str(it.quantity or 0))
+            fam = _familia_de_linia(db, it)
+            families[fam] = families.get(fam, Decimal("0")) + importe
+
     summary: dict = {
         "gross_sales": str(total_sales),
         "discounts_total": str(discounts_total),
@@ -153,6 +190,24 @@ def _compute_summary(db: Session, closure_date: date, close_open: bool) -> dict:
         "house": {
             "total": str(house_total),
             "orders": len(house_orders),
+        },
+        # NULS: nº de tiquet + import, i el total (decisió Tomeu 14/09/2026)
+        "nuls": {
+            "count": len(nuls_list),
+            "total": str(nuls_total),
+            "items": nuls_list,
+        },
+        # TOTAL GENERAL desglossat per famílies (begudes / menjars / varis)
+        "by_family": {k: str(v) for k, v in families.items()},
+        "by_family_total": str(sum(families.values(), Decimal("0"))),
+        # Totals per mètode de cobrament, ben explícits
+        "totals_per_metode": {
+            "efectiu": payments_by_method.get("cash", "0"),
+            "carrec_habitacio": payments_by_method.get("room_charge", "0"),
+            "targeta_credit": payments_by_method.get("card", "0"),
+            "bizum": payments_by_method.get("bizum", "0"),
+            "invitacions": str(house_total),
+            "nuls": str(nuls_total),
         },
         "room_charges": room_charges_list,
         "room_charges_total": str(room_charges_total),
@@ -272,3 +327,51 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
     db.commit()
     db.refresh(closure)
     return closure
+
+
+def _familia_de_linia(db: Session, item: OrderItem) -> str:
+    """Classifica una línia en la família de la Z: begudes / menjars / varis.
+
+    Surt de la CATEGORIA D'INGRÉS de l'article (configurable):
+      · beguda / begudes / cervesa / vi / refresc → "begudes"
+      · menjar / menjars / restauració / pensió   → "menjars"
+      · la resta (varis, drogueria, perfumeria, amenities, souvenirs...)
+        → "varis"  ← el que venen sobretot Recepció i Minimarket
+
+    Deixem de banda l'article viu si ja no existeix: mirem el nom com a pla B.
+    """
+    from ..models.models import MenuItem, IncomeCategory
+
+    if not item.menu_item_id:
+        return _familia_per_nom(item.name_snapshot or "")
+    art = db.get(MenuItem, item.menu_item_id)
+    if art is None:
+        return _familia_per_nom(item.name_snapshot or "")
+
+    cat = db.get(IncomeCategory, art.income_category_id) if art.income_category_id else None
+    if cat is not None:
+        nom = (cat.name or "").strip().lower()
+        codi = str(cat.account_code or "")
+        # Per compte PGC: 7052 restauració/pensió i 7010 bar → begudes/menjars
+        if "beguda" in nom or "bar" in nom or "cervesa" in nom:
+            return "begudes"
+        if "menjar" in nom or "restaura" in nom or "pensi" in nom or "cuina" in nom:
+            return "menjars"
+        if codi.startswith("7010") or codi.startswith("7020") or codi.startswith("7052"):
+            # compte de restauració: beguda si el nom ho diu, menjar si no
+            return "begudes" if "begu" in nom else "menjars"
+    return _familia_per_nom(item.name_snapshot or "")
+
+
+def _familia_per_nom(nom: str) -> str:
+    """Pla B: classificar pel nom de l'article quan no hi ha categoria."""
+    n = (nom or "").lower()
+    if any(k in n for k in ("cervesa", "aigua", "refresc", "cafè", "cafe", "vi", "whisky",
+                            "copa", "ampolla", "suc", "cacaolat", "spritz", "ginebra",
+                            "ron", "vodka", "xampany", "cava", "infusió")):
+        return "begudes"
+    if any(k in n for k in ("amanida", "entrecot", "llagosta", "pa amb oli", "berenar",
+                            "snack", "gelat", "entrepà", "sandvitx", "plat", "pizza",
+                            "tapa", "postres", "crema", "sopa")):
+        return "menjars"
+    return "varis"
