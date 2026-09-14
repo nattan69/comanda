@@ -113,6 +113,14 @@ export default function SalaPage() {
           areaActiva={areaActiva}
           onRefresca={refresca}
           onObrirTaula={obrirTaula}
+          onCanviaEstat={async (t, estat) => {
+            try {
+              await apiTable.setEstat(t.id, estat);
+              await refresca();
+            } catch (e) {
+              setMsg(e instanceof Error ? e.message : 'Error canviant l\'estat');
+            }
+          }}
         />
       )}
 

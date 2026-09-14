@@ -43,6 +43,15 @@ function OrdersPageInner() {
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+  /** Posa/treu una modificació d'una línia del carret («fora ceba», «poc fet»...). */
+  const alternaMod = (idx: number, mod: string) => {
+    setCart((c) => c.map((l, i) => {
+      if (i !== idx) return l;
+      const mods: string[] = l.mods || [];
+      return { ...l, mods: mods.includes(mod) ? mods.filter((m) => m !== mod) : [...mods, mod] };
+    }));
+  };
+
   return (
     <div className="p-6 flex flex-col md:flex-row gap-8">
       <div className="flex-1">
@@ -86,12 +95,44 @@ function OrdersPageInner() {
           <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto">
             {cart.length === 0 && <p className="text-gray-500 text-center py-4">Comanda buida</p>}
             {cart.map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center text-sm">
-                <div className="flex-1">
-                  <span className="font-medium">{item.name}</span>
-                  <span className="ml-2 text-gray-400">x{item.quantity}</span>
+              <div key={idx} className="rounded-xl px-3 py-2 bg-white/5">
+                <div className="flex justify-between items-center text-sm">
+                  <div className="flex-1">
+                    <span className="font-medium">{item.name}</span>
+                    <span className="ml-2 text-gray-400">x{item.quantity}</span>
+                  </div>
+                  <span className="font-bold">{(item.price * item.quantity).toFixed(2)} €</span>
                 </div>
-                <span className="font-bold">{(item.price * item.quantity).toFixed(2)} €</span>
+
+                {/* MODIFICACIONS (decisió Tomeu 14/09/2026): «fora ceba» d'un toc.
+                    Van al tiquet de cuina i al KDS. */}
+                {(item.mods || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {(item.mods as string[]).map((m) => (
+                      <button key={m} onClick={() => alternaMod(idx, m)}
+                        className="px-2 py-0.5 rounded-lg text-xs font-bold"
+                        style={{ background: 'rgba(239,68,68,.2)', color: '#fca5a5' }}>
+                        {m} ✕
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {MODS_TPV.map((m) => {
+                    const triat = (item.mods || []).includes(m);
+                    return (
+                      <button key={m} onClick={() => alternaMod(idx, m)}
+                        className="px-2 py-1 rounded-lg text-[11px]"
+                        style={{
+                          background: triat ? 'rgba(226,176,74,.25)' : 'rgba(255,255,255,.06)',
+                          color: triat ? '#e2b04a' : '#9aa7b8',
+                          border: triat ? '1px solid #e2b04a' : '1px solid transparent',
+                        }}>
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
@@ -107,8 +148,15 @@ function OrdersPageInner() {
               onClick={async () => {
                 const o = await api.createOrder({
                   table_id: tableId,
-                  items: cart.map(i => ({ menu_item_id: i.id, quantity: i.quantity })),
+                  items: cart.map(i => ({
+                    menu_item_id: i.id,
+                    quantity: i.quantity,
+                    // les modificacions del plat («sense ceba»...) van a la cuina
+                    modifications: (i.mods || []).length ? i.mods : null,
+                  })),
                 });
+                // avisem la CUINA (KDS) amb els plats i les modificacions
+                try { await api.enviarCuina(String((o as any)?.id), false); } catch { /* el KDS ja rebrà order.created */ }
                 alert('Comanda enviada a cuina!');
                 setOrderTotal(total);  // guardar el total abans de buidar el carret
                 setOrderId((o as any)?.id ?? null);

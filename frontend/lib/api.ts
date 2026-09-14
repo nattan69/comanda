@@ -460,6 +460,16 @@ export const apiTable = {
   async getComanda(tableId: string): Promise<TableComanda> {
     return apiRequest<TableComanda>(`/tables/${tableId}/comanda`);
   },
+  /**
+   * Canvia l'ESTAT d'una taula (lliure/ocupada/reservada/per netejar/bloquejada):
+   * són els colors del peu del pla de sala (decisió Tomeu 14/09/2026).
+   */
+  async setEstat(tableId: string, estat: string): Promise<Table> {
+    return apiRequest<Table>(`/tables/${tableId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: estat }),
+    });
+  },
   /** Mou una taula a una nova posició (mode edició del pla de sala). */
   async moveTable(tableId: string, x: number, y: number): Promise<Table> {
     return apiRequest<Table>(`/tables/${tableId}`, {

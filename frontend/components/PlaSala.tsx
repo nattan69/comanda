@@ -19,7 +19,18 @@ type Props = {
   areaActiva: string;
   onRefresca: () => void;
   onObrirTaula: (t: Table) => void;
+  /** Canvia l'ESTAT d'una taula (lliure/ocupada/reservada/per netejar/bloquejada). */
+  onCanviaEstat?: (t: Table, estat: string) => Promise<void> | void;
 };
+
+//: Els ESTATS que es poden triar (els colors del peu del pla de sala).
+const ESTATS = [
+  { id: 'available',      nom: 'Lliure',       emoji: '🟢' },
+  { id: 'occupied',       nom: 'Ocupada',      emoji: '🟡' },
+  { id: 'reserved',       nom: 'Reservada',    emoji: '🔵' },
+  { id: 'needs_cleaning', nom: 'Per netejar',  emoji: '🧹' },
+  { id: 'blocked',        nom: 'Bloquejada',   emoji: '⛔' },
+] as const;
 
 const COLOR_ESTAT: Record<string, { bg: string; border: string; text: string }> = {
   available:     { bg: 'rgba(34,197,94,.15)',  border: '#22c55e', text: '#86efac' },
@@ -29,7 +40,7 @@ const COLOR_ESTAT: Record<string, { bg: string; border: string; text: string }> 
   blocked:       { bg: 'rgba(239,68,68,.15)',  border: '#ef4444', text: '#fca5a5' },
 };
 
-export default function PlaSala({ taules, arees, areaActiva, onRefresca, onObrirTaula }: Props) {
+export default function PlaSala({ taules, arees, areaActiva, onRefresca, onObrirTaula, onCanviaEstat }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [arrossegant, setArrossegant] = useState<string | null>(null);
   const [posLocal, setPosLocal] = useState<Record<string, { x: number; y: number }>>({});
@@ -37,6 +48,8 @@ export default function PlaSala({ taules, arees, areaActiva, onRefresca, onObrir
   const [canvis, setCanvis] = useState(false);
   const [guardant, setGuardant] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  //: Taula de la qual s'està canviant l'estat (obre el menú de colors)
+  const [canviantEstat, setCanviantEstat] = useState<string | null>(null);
   const llenç = useRef<HTMLDivElement>(null);
 
   const area = arees.find((a) => a.id === areaActiva);
@@ -152,6 +165,7 @@ export default function PlaSala({ taules, arees, areaActiva, onRefresca, onObrir
             <div key={t.id}
               onPointerDown={(e) => començaArrossegament(e, t)}
               onDoubleClick={() => { if (!editMode) onObrirTaula(t); }}
+              onContextMenu={(e) => { e.preventDefault(); if (!editMode) setCanviantEstat(t.id); }}
               title={editMode ? 'Arrossega per moure' : 'Doble clic per veure la comanda'}
               className="absolute flex flex-col items-center justify-center select-none"
               style={{
@@ -166,11 +180,61 @@ export default function PlaSala({ taules, arees, areaActiva, onRefresca, onObrir
                 {t.number}
               </span>
               <span style={{ color: '#9aa7b8', fontSize: 10 }}>{t.seats}p</span>
+              {/* botonet per canviar l'estat (els colors del peu) — sense doble clic ni clic llarg */}
+              {!editMode && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCanviantEstat(canviantEstat === t.id ? null : t.id); }}
+                  title="Canviar l'estat de la taula"
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center"
+                  style={{ background: c.border, color: '#1a1a2e', border: '2px solid #1a1a2e' }}>
+                  ⌄
+                </button>
+              )}
               {pendent > 0 && (
                 <span className="absolute -bottom-2 px-2 py-0.5 rounded-full font-bold"
                   style={{ background: '#e2b04a', color: '#1a1a2e', fontSize: 11 }}>
                   {pendent.toFixed(2)}€
                 </span>
+              )}
+
+              {/* === MENÚ D'ESTATS (els colors del peu) ===
+                  S'obre amb el botonet ⌄ de la taula. Permet posar-la lliure,
+                  ocupada, reservada, per netejar o bloquejada — els mateixos
+                  colors de la llegenda del peu (decisió Tomeu 14/09/2026). */}
+              {!editMode && canviantEstat === t.id && (
+                <div className="absolute z-30 flex flex-col gap-1 p-2 rounded-xl"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    top: m.h + 6, left: 0, minWidth: 150,
+                    background: '#141429', border: '1px solid rgba(226,176,74,.35)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,.5)',
+                  }}>
+                  <span className="text-[10px] uppercase font-bold px-1" style={{ color: '#9aa7b8' }}>
+                    Estat de la taula
+                  </span>
+                  {ESTATS.map((e) => (
+                    <button key={e.id}
+                      onClick={async () => {
+                        setCanviantEstat(null);
+                        if (onCanviaEstat) await onCanviaEstat(t, e.id);
+                      }}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs font-semibold"
+                      style={{
+                        background: t.status === e.id ? 'rgba(226,176,74,.2)' : 'transparent',
+                        color: '#e5e9f0',
+                      }}>
+                      <span className="inline-block w-3 h-3 rounded-full shrink-0"
+                        style={{ background: COLOR_ESTAT[e.id]?.border }} />
+                      {e.emoji} {e.nom}
+                      {t.status === e.id && <span className="ml-auto" style={{ color: '#e2b04a' }}>✓</span>}
+                    </button>
+                  ))}
+                  {t.status === 'occupied' && (
+                    <span className="text-[10px] px-1 mt-1" style={{ color: '#fca5a5' }}>
+                      ⚠️ Està ocupada; alliberar-la no cobra la comanda
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           );
