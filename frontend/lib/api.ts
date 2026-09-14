@@ -136,12 +136,24 @@ export function logout() {
 }
 
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  // ⚠️ Content-Type: application/json OBLIGATORI quan hi ha cos.
+  // Sense aquest header, FastAPI rep el cos com a text pla i respon
+  // 422 "Input should be a valid dictionary" (catch de Tomeu 14/09/2026:
+  // el guardar la disposició del pla de sala petava per aquí).
+  // NO s'ha de posar si el cos és FormData (multipart): el navegador ha de
+  // generar ell mateix el boundary.
+  const esFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string> || {}),
+    ...authHeaders(),
+  };
+  if (options.body != null && !esFormData && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    headers: {
-      ...(options.headers || {}),
-      ...authHeaders(),
-    },
+    headers,
   });
   if (response.status === 401) {
     logout();
