@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from .api.routes import tables, menu, reservations, orders, staff, fiscal, integrations, closure, shifts, centers, establishments, room_credits
+from .api.routes import tables, menu, reservations, orders, staff, fiscal, integrations, closure, shifts, centers, establishments, room_credits, staff_porter
 from .db import engine, Base
 from .models import models  # Importar modelos para que SQLAlchemy los registre
 from .deps import require_auth
@@ -51,6 +51,9 @@ app.include_router(menu.router, prefix="/api/v1/menu", tags=["Menu"], dependenci
 app.include_router(reservations.router, prefix="/api/v1/reservations", tags=["Reservations"], dependencies=[Depends(require_auth)])
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["Orders"], dependencies=[Depends(require_auth)])
 app.include_router(staff.router, prefix="/api/v1/staff", tags=["Staff"])
+# Porter únic (Jornada → Comanda): bescanvi del comanda_token JWT per una sessió
+# de dispositiu. Públic (no require_auth) perquè és, precisament, la via d'entrada.
+app.include_router(staff_porter.router, prefix="/api/v1/staff", tags=["Porter Jornada"])
 app.include_router(fiscal.router, prefix="/api/v1/fiscal", tags=["Fiscal"], dependencies=[Depends(require_auth)])
 app.include_router(integrations.router, prefix="/api/v1/integrations", tags=["Integrations"])
 app.include_router(closure.router, prefix="/api/v1/closure", tags=["Closure"], dependencies=[Depends(require_auth)])

@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     # Seguridad
     API_KEY: str = ""  # clau genèrica (Ariadna)
     JORNADA_API_KEY: str = ""  # clau pròpia de la integració Jornada
+
+    # Porter únic (Jornada/Jornals → Comanda): secret COMPARTIT per validar el
+    # comanda_token (JWT) que emet la conxa. Ha de coincidir amb el secret_key
+    # de Jornals/Jornada. Vegeu docs/PROPOSTA_PORTER_UNIC_JORNADA_COMANDA.md
+    JORNADA_PORTER_SECRET: str = ""
+    JORNADA_PORTER_ALGORITHM: str = "HS256"
+
     DEBUG: bool = False
 
     # Integració PMS (room charges cap a Estada o Mews/Cloudbeds...)
