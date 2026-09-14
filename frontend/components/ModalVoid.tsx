@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { api } from '@/lib/api';
+import { api, API_URL_FETCH } from '@/lib/api';
 
 /**
  * Modal d'ANUL·LACIÓ — POST /orders/{id}/void { amount, reason?, authorized_by_id? }.
@@ -24,7 +24,7 @@ export default function ModalVoid({
     setSaving(true); setError(null);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/orders/${orderId}/void`,
+        `${API_URL_FETCH}/orders/${orderId}/void`,
         {
           method: 'POST',
           headers: {

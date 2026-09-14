@@ -123,7 +123,7 @@ export type DayClosure = {
  *   · si no → RUTA RELATIVA (`/api/v1`), que va al mateix domini i el
  *     servidor de Caddy/túnel ja la reenvia al backend.
  */
-const API_BASE_URL =
+export const API_BASE_URL =
   typeof window === 'undefined'
     // Al SERVIDOR (SSR) cal URL absoluta; mateix host que el backend.
     ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1')
@@ -555,3 +555,19 @@ export const apiOrdersExt = {
     });
   },
 };
+
+
+/**
+ * URL base de l'API per a les crides FETCH DIRECTES (les que no passen per
+ * apiRequest). MAI ha de caure a localhost en producció: al navegador del
+ * cambrer no hi ha res a localhost (catch 14/09/2026).
+ *
+ * · Al NAVEGADOR → ruta relativa '/api/v1' (el proxy de next.config.js la
+ *   reenvia al backend, al mateix domini).
+ * · Al SERVIDOR  → absoluta (localhost:8000), que és on viu el backend.
+ * · Sempre es pot sobreescriure amb NEXT_PUBLIC_API_URL.
+ */
+export const API_URL_FETCH =
+  typeof window === 'undefined'
+    ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1')
+    : (process.env.NEXT_PUBLIC_API_URL || '/api/v1');

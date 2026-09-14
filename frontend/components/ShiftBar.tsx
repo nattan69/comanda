@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, apiCarta, Center, Staff, Shift, getStoredStaff } from '@/lib/api';
+import { api, apiCarta, Center, Staff, Shift, getStoredStaff, API_URL_FETCH } from '@/lib/api';
 
 /**
  * Selector de centre + torn (contracte Maria): el cambrer tria el punt de venda
@@ -32,7 +32,7 @@ export default function ShiftBar({ onCenter }: { onCenter?: (id: string | null) 
     const staff = getStoredStaff();
     if (!staff) { setMsg('Fes login primer'); return; }
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/shifts/open`, {
+      const res = await fetch(`${API_URL_FETCH}/shifts/open`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('comanda-token') || ''}` },
         body: JSON.stringify({ staff_id: staff.id, center_id: centerId }),
@@ -50,7 +50,7 @@ export default function ShiftBar({ onCenter }: { onCenter?: (id: string | null) 
   const tanca = async () => {
     if (!shift) return;
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/shifts/${shift.id}/close`, {
+      const res = await fetch(`${API_URL_FETCH}/shifts/${shift.id}/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('comanda-token') || ''}` },
         body: JSON.stringify({}),

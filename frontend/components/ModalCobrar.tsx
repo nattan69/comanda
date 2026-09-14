@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { api } from '@/lib/api';
+import { api, API_URL_FETCH } from '@/lib/api';
 
 /**
  * Modal de COBRAMENT (decisió Tomeu 13/09) — contracte backend:
@@ -85,7 +85,7 @@ export default function ModalCobrar({
         payload.amount = 0;
       }
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/orders/${orderId}/pay`, {
+      const res = await fetch(`${API_URL_FETCH}/orders/${orderId}/pay`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

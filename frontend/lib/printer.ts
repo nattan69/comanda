@@ -1,3 +1,4 @@
+import { API_URL_FETCH } from '@/lib/api';
 /**
  * Impressió ESC/POS — envia els bytes del backend DIRECTAMENT a la impressora.
  * (Tomeu+Maria 13/09: els bytes ja porten init, negreta, tall i CP858 — mai transformar.)
@@ -91,7 +92,7 @@ export async function imprimeixTiquetServei(
   orderId: string,
   inclouAnterior = true,
 ): Promise<'gateway' | 'webusb'> {
-  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const API = API_URL_FETCH;
   const token = typeof window !== 'undefined' ? localStorage.getItem('comanda-token') || '' : '';
   const res = await fetch(
     `${API}/orders/${orderId}/tiquet-servei?format=escpos&inclou_anterior=${inclouAnterior}`,
@@ -107,7 +108,7 @@ export async function imprimeixTiquetServei(
  * El check «Imprimir la comanda a la CUINA» de la Comandera controla si es crida.
  */
 export async function imprimeixTiquetCuina(orderId: string): Promise<'gateway' | 'webusb'> {
-  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const API = API_URL_FETCH;
   const token = typeof window !== 'undefined' ? localStorage.getItem('comanda-token') || '' : '';
   const res = await fetch(`${API}/orders/${orderId}/tiquet-cuina?format=escpos`,
     { headers: { Authorization: `Bearer ${token}` } });
