@@ -99,6 +99,13 @@ class TableUpdate(BaseModel):
 class TableOut(TableBase):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
+    # === Pla de sala (decisió Tomeu 14/09/2026) ===
+    #: Saldo pendent de cobrar de la comanda oberta d'aquesta taula (0 si no n'hi ha).
+    pending_amount: float = 0
+    #: id de la comanda oberta (None si la taula és lliure).
+    open_order_id: Optional[UUID] = None
+    #: total ja cobrat parcialment de la comanda oberta.
+    paid_amount: float = 0
 
 
 # ============================================================

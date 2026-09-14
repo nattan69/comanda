@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID, uuid4
 from decimal import Decimal
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 from ...db import get_db
@@ -34,8 +35,16 @@ router = APIRouter()
 
 
 def _recalc_total(order: Order, db: Session) -> None:
-    """Recalcula el total de la comanda a partir dels seus items."""
-    items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+    """Recalcula el total de la comanda a partir dels seus items.
+
+    ⚠️ EXCLOU les línies anul·lades (status='cancelled') — si no, anul·lar un
+    article no faria baixar el compte. Fix 14/09/2026.
+    """
+    items = (
+        db.query(OrderItem)
+        .filter(OrderItem.order_id == order.id, OrderItem.status != "cancelled")
+        .all()
+    )
     total = Decimal("0")
     for it in items:
         price = Decimal(str(it.price_snapshot or 0))
@@ -371,3 +380,61 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
         "amount": str(payment.amount or 0),
     })
     return payment
+
+
+# ============================================================
+# CRUD DE LÍNIES (Modal de taula del pla de sala — decisió Tomeu 14/09/2026)
+# ============================================================
+
+class OrderItemPatch(BaseModel):
+    """Modificació d'una línia de comanda: només la quantitat."""
+    quantity: int = Field(..., ge=1, description="Nova quantitat (mínim 1)")
+
+
+@router.patch("/{order_id}/items/{item_id}", response_model=OrderItemOut)
+def update_item(order_id: UUID, item_id: UUID, payload: OrderItemPatch, db: Session = Depends(get_db)):
+    """Modifica la quantitat d'una línia de la comanda (pla de sala).
+
+    Recalcula el total de la comanda. No permet editar línies ja anul·lades.
+    """
+    item = db.get(OrderItem, item_id)
+    if not item or item.order_id != order_id:
+        raise HTTPException(status_code=404, detail="Línia no trobada en aquesta comanda")
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Comanda no encontrada")
+    if item.status == "cancelled":
+        raise HTTPException(status_code=409, detail="Aquesta línia ja està anul·lada")
+    if order.status in ("paid", "cancelled", "closed"):
+        raise HTTPException(status_code=409, detail="La comanda ja està tancada — no es pot modificar")
+
+    item.quantity = payload.quantity
+    db.flush()
+    _recalc_total(order, db)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.post("/{order_id}/items/{item_id}/void", response_model=OrderItemOut)
+def void_item(order_id: UUID, item_id: UUID, db: Session = Depends(get_db)):
+    """Anul·la UNA línia de la comanda (pla de sala).
+
+    La línia queda amb status='cancelled' (traça conservada, com mana la
+    política comptable: mai esborrar) i el total de la comanda es recalcula.
+    """
+    item = db.get(OrderItem, item_id)
+    if not item or item.order_id != order_id:
+        raise HTTPException(status_code=404, detail="Línia no trobada en aquesta comanda")
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Comanda no encontrada")
+    if order.status in ("paid", "cancelled", "closed"):
+        raise HTTPException(status_code=409, detail="La comanda ja està tancada — no es pot anul·lar línies")
+
+    item.status = "cancelled"
+    db.flush()
+    _recalc_total(order, db)
+    db.commit()
+    db.refresh(item)
+    return item

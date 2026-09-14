@@ -8,14 +8,58 @@
  * (Refactor Tomeu+Maria 13/09: fora MOCK_*, connexió real.)
  */
 
-export type Area = { id: string; name: string };
+/** Àrea de la sala: barra, interior, terrassa... amb recàrrec opcional. */
+export type Area = {
+  id: string;
+  name: string;
+  position_x: number;
+  position_y: number;
+  surcharge_percent?: number | string;
+};
+
+/** Taula del pla de sala: posició REAL, forma, estat i saldo pendent. */
 export type Table = {
   id: string;
-  number: number;
-  area_id?: string;
+  number: number | string;
+  area_id?: string | null;
   area?: string;
-  status: 'free' | 'occupied' | string;
+  status: 'free' | 'available' | 'occupied' | 'reserved' | 'needs_cleaning' | 'blocked' | string;
   seats?: number;
+  position_x?: number;
+  position_y?: number;
+  shape?: string;
+  is_active?: boolean;
+  // === Pla de sala (decisió Tomeu 14/09/2026) ===
+  /** Saldo pendent de cobrar de la comanda oberta (0 si no n'hi ha). */
+  pending_amount?: number;
+  /** id de la comanda oberta de la taula, si en té. */
+  open_order_id?: string | null;
+  /** Total ja cobrat parcialment. */
+  paid_amount?: number;
+};
+
+/** Desglossament d'una comanda per al modal del pla de sala. */
+export type TableComanda = {
+  table_id: string;
+  open: boolean;
+  order_id?: string;
+  status?: string;
+  total_amount: number;
+  discount_amount: number;
+  paid_amount: number;
+  pending_amount: number;
+  lines: {
+    id: string;
+    menu_item_id?: string | null;
+    name: string;
+    vat_rate?: number | null;
+    quantity: number;
+    unit_price: number;
+    amount: number;
+    status?: string;
+    modifications?: string[] | null;
+  }[];
+  payments: { id: string; method: string; amount: number; created_at?: string }[];
 };
 export type MenuCategory = { id: string; name: string; sort_order?: number };
 export type MenuItem = {
@@ -344,5 +388,47 @@ export const apiRoom = {
   /** Info de l'habitació per al room charge: titular, règim i crèdit (via Comanda, mai directe a Estada). */
   async roomInfo(roomNumber: string): Promise<RoomInfo> {
     return apiRequest<RoomInfo>(`/orders/room-info?room_number=${encodeURIComponent(roomNumber)}`);
+  },
+};
+
+
+// ============================================================
+// PLA DE SALA (decisió Tomeu 14/09/2026)
+// ============================================================
+export const apiTable = {
+  /** Desglossament de la comanda oberta d'una taula (per al modal). */
+  async getComanda(tableId: string): Promise<TableComanda> {
+    return apiRequest<TableComanda>(`/tables/${tableId}/comanda`);
+  },
+  /** Mou una taula a una nova posició (mode edició del pla de sala). */
+  async moveTable(tableId: string, x: number, y: number): Promise<Table> {
+    return apiRequest<Table>(`/tables/${tableId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ position_x: x, position_y: y }),
+    });
+  },
+  /** Crea una taula nova. */
+  async createTable(dades: { number: string; area_id?: string; seats?: number; position_x?: number;
+                             position_y?: number; shape?: string }): Promise<Table> {
+    return apiRequest<Table>('/tables', { method: 'POST', body: JSON.stringify(dades) });
+  },
+  /** Esborra una taula. */
+  async deleteTable(tableId: string): Promise<void> {
+    return apiRequest<void>(`/tables/${tableId}`, { method: 'DELETE' });
+  },
+  /** Canvia la quantitat d'una línia de comanda. */
+  async updateLine(orderId: string, lineId: string, quantity: number) {
+    return apiRequest(`/orders/${orderId}/items/${lineId}`, {
+      method: 'PATCH', body: JSON.stringify({ quantity }),
+    });
+  },
+  /** Anul·la una línia de comanda (queda amb traça). */
+  async voidLine(orderId: string, lineId: string) {
+    return apiRequest(`/orders/${orderId}/items/${lineId}/void`, { method: 'POST' });
+  },
+  /** Crea una àrea nova (barra, interior, terrassa...). */
+  async createArea(dades: { name: string; position_x?: number; position_y?: number;
+                            surcharge_percent?: number }): Promise<Area> {
+    return apiRequest<Area>('/tables/areas', { method: 'POST', body: JSON.stringify(dades) });
   },
 };
