@@ -11,7 +11,15 @@ import { useComandaWs } from '@/lib/useComandaWs';
  * Contracte: POST /orders { table_id, staff_id, shift_id, center_id, items:[{menu_item_id, quantity}] }
  */
 
-type Linia = { item: MenuItem; qty: number };
+//: Una línia del carret. `mods` són les modificacions del plat («sense ceba»,
+//: «poc fet»...) que van al TIQUET DE CUINA i al KDS (decisió Tomeu 14/09/2026).
+type Linia = { item: MenuItem; qty: number; mods: string[] };
+
+//: Modificacions ràpides d'un toc (les que de veritat passen a una cuina).
+const MODS_RAPIDES = [
+  'sense ceba', 'sense all', 'sense sal', 'poc fet', 'molt fet',
+  'sense gluten', 'sense lactosa', 'picant', 'sense tomàtiga', 'per emportar',
+];
 
 export default function ComanderaTaula() {
   const router = useRouter();
@@ -90,7 +98,7 @@ export default function ComanderaTaula() {
     setCarret((c) => {
       const i = c.findIndex((l) => l.item.id === item.id);
       if (i >= 0) { const n = [...c]; n[i] = { ...n[i], qty: n[i].qty + 1 }; return n; }
-      return [...c, { item, qty: 1 }];
+      return [...c, { item, qty: 1, mods: [] }];
     });
   };
   const treure = (itemId: string) => {
@@ -104,6 +112,20 @@ export default function ComanderaTaula() {
     });
   };
 
+  /** Posa/treu una modificació d'una línia («fora ceba», «poc fet»...). */
+  const alternaMod = (itemId: string, mod: string) => {
+    setCarret((c) => c.map((l) => {
+      if (l.item.id !== itemId) return l;
+      const te = l.mods.includes(mod);
+      return { ...l, mods: te ? l.mods.filter((m) => m !== mod) : [...l.mods, mod] };
+    }));
+  };
+
+  /** Esborra TOTES les modificacions d'una línia. */
+  const netejaMods = (itemId: string) => {
+    setCarret((c) => c.map((l) => (l.item.id === itemId ? { ...l, mods: [] } : l)));
+  };
+
   const enviar = async () => {
     if (!carret.length || !staff) return;
     setEnviant(true); setMsg(null);
@@ -114,7 +136,12 @@ export default function ComanderaTaula() {
         setEnviant(false);
         return;
       }
-      const linies = carret.map((l) => ({ menu_item_id: l.item.id, quantity: l.qty }));
+      // Cada línia porta les seves modificacions (van al tiquet de cuina i al KDS)
+      const linies = carret.map((l) => ({
+        menu_item_id: l.item.id,
+        quantity: l.qty,
+        modifications: l.mods.length ? l.mods : null,
+      }));
       let ordreId = comanda?.id || null;
       const eraNova = !comanda;
 
@@ -235,7 +262,72 @@ export default function ComanderaTaula() {
 
       {/* carretó flotant */}
       {unitats > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-4" style={{ background: '#1a1a2e' }}>
+        <div className="fixed bottom-0 left-0 right-0 p-4 max-h-[75vh] overflow-y-auto"
+          style={{ background: '#1a1a2e', borderTop: '1px solid rgba(226,176,74,.25)' }}>
+
+          {/* === DESGLOSSAMENT DEL CARRET amb les MODIFICACIONS ===
+              Aquí és on es posa «fora ceba» a un plat: cada línia del carret té
+              els seus botons ràpids i les modificacions triades es veuen en
+              vermell (van al tiquet de cuina i al KDS). */}
+          <div className="space-y-2 mb-3">
+            {carret.map((l) => (
+              <div key={l.item.id} className="rounded-xl px-3 py-2"
+                style={{ background: 'rgba(255,255,255,.05)' }}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-bold" style={{ color: '#e2b04a' }}>{l.qty}×</span>
+                    <span className="truncate" style={{ color: '#e5e9f0' }}>{l.item.name}</span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-sm font-semibold mr-1" style={{ color: '#e2b04a' }}>
+                      {(l.item.price * l.qty).toFixed(2)}€
+                    </span>
+                    <button onClick={() => treure(l.item.id)}
+                      className="w-8 h-8 rounded-lg font-bold"
+                      style={{ background: 'rgba(255,255,255,.1)', color: '#e5e9f0' }}>−</button>
+                    <button onClick={() => afegir(l.item)}
+                      className="w-8 h-8 rounded-lg font-bold"
+                      style={{ background: '#e2b04a', color: '#1a1a2e' }}>+</button>
+                  </div>
+                </div>
+
+                {/* modificacions triades */}
+                {l.mods.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {l.mods.map((m) => (
+                      <button key={m} onClick={() => alternaMod(l.item.id, m)}
+                        className="px-2 py-0.5 rounded-lg text-xs font-bold"
+                        style={{ background: 'rgba(239,68,68,.2)', color: '#fca5a5' }}>
+                        {m} ✕
+                      </button>
+                    ))}
+                    <button onClick={() => netejaMods(l.item.id)}
+                      className="px-2 py-0.5 rounded-lg text-xs"
+                      style={{ color: '#9aa7b8' }}>neteja</button>
+                  </div>
+                )}
+
+                {/* botons ràpids: «fora ceba» d'un toc */}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {MODS_RAPIDES.map((m) => {
+                    const triat = l.mods.includes(m);
+                    return (
+                      <button key={m} onClick={() => alternaMod(l.item.id, m)}
+                        className="px-2 py-1 rounded-lg text-xs"
+                        style={{
+                          background: triat ? 'rgba(226,176,74,.25)' : 'rgba(255,255,255,.06)',
+                          color: triat ? '#e2b04a' : '#9aa7b8',
+                          border: triat ? '1px solid #e2b04a' : '1px solid transparent',
+                        }}>
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm" style={{ color: '#9aa7b8' }}>{unitats} articles</span>
             <span className="text-xl font-bold" style={{ color: '#e2b04a' }}>{total.toFixed(2)} €</span>
