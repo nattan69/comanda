@@ -97,17 +97,18 @@ def envia_cierre_a_compta(
     if vat_total > 0:
         lines.append({"account": "4771", "debit": "0", "credit": str(vat_total), "concept": "IVA repercutit"})
 
-    # 4) Ajust per arrodoniments (si cal), a un compte dedicat — MAI al pont 5730,
-    # que ha de quedar saldat.
+    # 4) Si l'assentament no quadra, NO l'enviem: un assentament desequilibrat
+    #    MAI s'ha d'enviar a Compta (millor un error clar que un ajust inventat
+    #    a un compte que pot no existir al PGC).
     debit_total = sum(Decimal(l["debit"]) for l in lines)
     credit_total = sum(Decimal(l["credit"]) for l in lines)
     diff = debit_total - credit_total
-    if diff > 0:
-        # falta haver: ho abonem com a ingrés d'arrodoniment
-        lines.append({"account": "778", "debit": "0", "credit": str(diff), "concept": "Ajust arrodoniment"})
-    elif diff < 0:
-        # falta deure: ho carreguem com a despesa d'arrodoniment
-        lines.append({"account": "669", "debit": str(-diff), "credit": "0", "concept": "Ajust arrodoniment"})
+    if diff != 0:
+        return {
+            "ok": False,
+            "error": "assentament_desequilibrat",
+            "message": f"Assentament no quadra: deure {debit_total} ≠ haver {credit_total} (diferència {diff})",
+        }
 
     payload = {
         "external_id": external_id,
