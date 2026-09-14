@@ -316,9 +316,25 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
     if not order:
         raise HTTPException(status_code=404, detail="Comanda no trobada")
 
+    # Els 5 tipus de pagament del TPV (decisió Tomeu 14/09/2026):
+    #   cash        → Efectiu
+    #   room_charge → Crèdit (càrrec a habitació)
+    #   card        → Targeta de crèdit
+    #   house       → Invitació
+    #   anul        → Nul (s'anul·la la consumició; no genera cobrament ni IVA)
+    # (bizum i split es mantenen per compatibilitat amb el que ja hi havia)
     method = (payload.method or "").strip().lower()
-    if method not in ("cash", "card", "bizum", "split", "room_charge", "house"):
+    if method not in ("cash", "card", "bizum", "split", "room_charge", "house", "anul", "null"):
         raise HTTPException(status_code=400, detail="Mètode de pagament invàlid")
+
+    # === NUL ===
+    # «Nul» és un mètode PROPI (no és una invitació): la consumició no es cobra
+    # ni es declara, però la Z els ha de poder distingir. Tots dos queden fora
+    # de la comptabilitat (ni ingrés ni IVA), però amb traça separada.
+    if method == "null":
+        method = "anul"
+    if method == "anul" and not payload.reason:
+        payload.reason = "Nul (anul·lació de consumició)" 
 
     # Validació del càrrec a habitació (habilitació + topall)
     pms_result = None
@@ -367,6 +383,10 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
                 if new_balance > Decimal(str(rc.credit_limit)):
                     raise HTTPException(status_code=400, detail="Habitació topada (supera el límit de crèdit)")
 
+    # Seqüència de tiquet: INV per a invitacions, TICKET per a la resta.
+    # Els NULS comparteixen la sèrie TICKET (el seu tiquet queda marcat amb el
+    # motiu i el mètode `anul`, que els distingeix a la Z sense necessitat
+    # d'una sèrie pròpia).
     seq = "INV" if method == "house" else "TICKET"
     _, ticket_code = next_ticket_number(db, seq)
 

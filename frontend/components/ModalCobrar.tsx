@@ -13,12 +13,15 @@ import { api } from '@/lib/api';
  * per marge insuficient abans d'enviar.
  */
 
+// Els 5 tipus de pagament (decisió Tomeu 14/09/2026).
+// El CÀRREC A HABITACIÓ és una OPCIÓ DE PAGAMENT (no un panell al body):
+// en triar-la, s'informa el nº d'habitació i es valida el crèdit del foli.
 const METODES = [
-  { id: 'cash', label: '💵 Efectiu' },
-  { id: 'card', label: '💳 Targeta' },
-  { id: 'bizum', label: '📲 Bizum' },
-  { id: 'room_charge', label: '🛏️ Habitació' },
-  { id: 'house', label: '🏠 Casa (invitat)' },
+  { id: 'cash',        label: '💵 Efectiu' },
+  { id: 'room_charge', label: '🛏️ Crèdit (càrrec a habitació)' },
+  { id: 'card',        label: '💳 Targeta de crèdit' },
+  { id: 'house',       label: '🎟️ Invitació' },
+  { id: 'anul',        label: '⊘ Nul' },
 ];
 
 export default function ModalCobrar({
@@ -70,9 +73,17 @@ export default function ModalCobrar({
       };
       if (method === 'room_charge') payload.room_number = room.trim();
       if (method === 'room_charge' && roomInfo?.guest_name) payload.guest_name = roomInfo.guest_name;
-      if (method === 'house') payload.invited_by = guest.trim() || null;
       if (method === 'card' && cardRef.trim()) payload.card_reference = cardRef.trim();
-      if (method === 'house' && reason.trim()) payload.reason = reason.trim();
+      // INVITACIÓ: qui invita (traça a la Z, no genera ingrés)
+      if (method === 'house') {
+        payload.invited_by = guest.trim() || null;
+        if (reason.trim()) payload.reason = reason.trim();
+      }
+      // NUL: no es cobra ni es declara; queda la traça del motiu
+      if (method === 'anul') {
+        payload.reason = reason.trim() || 'Nul (anul·lació de consumició)';
+        payload.amount = 0;
+      }
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/orders/${orderId}/pay`, {
         method: 'POST',
@@ -161,6 +172,22 @@ export default function ModalCobrar({
             <input value={guest} onChange={(e) => setGuest(e.target.value)} placeholder="ex. Direcció, visita comercial"
               className="w-full mt-1 bg-white/5 text-white text-sm p-2 rounded border border-white/15" />
           </label>
+        )}
+
+        {/* NUL: no es cobra res, però queda la traça del motiu */}
+        {method === 'anul' && (
+          <div className="mb-4 space-y-3">
+            <div className="p-3 rounded-lg text-xs" style={{ background: 'rgba(239,68,68,.12)', color: '#fca5a5' }}>
+              ⊘ <b>Nul</b>: la consumició no es cobra ni es declara. Queda registrada amb el motiu
+              per al tancament del dia (no genera ingrés ni IVA).
+            </div>
+            <label className="block">
+              <span className="text-xs text-gray-400">Motiu de l'anul·lació</span>
+              <input value={reason} onChange={(e) => setReason(e.target.value)}
+                placeholder="ex. error de comanda, producte en mal estat"
+                className="w-full mt-1 bg-white/5 text-white text-sm p-2 rounded border border-white/15" />
+            </label>
+          </div>
         )}
 
         <div className="flex gap-3 justify-end mt-2">

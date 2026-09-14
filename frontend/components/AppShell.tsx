@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, ClipboardList, Languages, Calculator } from 'lucide-react';
 import LogoutLink from '@/components/LogoutLink';
-import RoomCharge from '@/components/RoomCharge';
 import Header from '@/components/Header';
 import { IdiomaProvider } from '@/lib/idioma';
 
@@ -67,7 +66,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-y-auto p-0 flex flex-col">
         <Header />
         <div className="flex-1">
-          <RoomCharge />
           {children}
         </div>
       </main>

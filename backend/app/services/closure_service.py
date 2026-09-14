@@ -22,8 +22,10 @@ from .ticket_service import next_ticket_number
 from .pms_adapter import get_pms_adapter
 from .comanda_client import envia_cierre_a_compta
 
-# Mètodes de pagament que són "venda real" (declarables). `house` (invitació) va a part.
-NON_SALE_METHODS = {"house"}
+# Mètodes que NO són "venda real" (no es declaren, queden fora del total i de
+# l'IVA): les INVITACIONS (`house`) i els NULS (`anul`). Tots dos es llisten
+# A PART perquè la Z en pugui donar compte sense contaminar la venda.
+NON_SALE_METHODS = {"house", "anul", "null"}
 OPEN_STATUSES = ["open", "sent_to_kitchen", "served"]
 
 
@@ -52,7 +54,7 @@ def _compute_summary(db: Session, closure_date: date, close_open: bool) -> dict:
     house_order_ids = {
         p.order_id
         for p in db.query(Payment).filter(
-            Payment.method == "house",
+            Payment.method.in_(list(NON_SALE_METHODS)),
             Payment.status == "completed",
             Payment.paid_at >= start,
             Payment.paid_at < end,
