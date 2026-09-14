@@ -9,6 +9,14 @@ import ModalVoid from '@/components/ModalVoid';
 import { imprimeixTicket } from '@/lib/printer';
 import { getStoredStaff } from '@/lib/api';
 
+//: Modificacions ràpides del plat («fora ceba», «poc fet»...) — un toc per
+//: posar-les. Van al TIQUET DE CUINA i al KDS (decisió Tomeu 14/09/2026).
+//: Mateixa UX que la Comandera: es poden fer des del TPV d'escriptori també.
+const MODS_TPV = [
+  'sense ceba', 'sense all', 'sense sal', 'poc fet', 'molt fet',
+  'sense gluten', 'sense lactosa', 'picant', 'sense tomàtiga', 'per emportar',
+];
+
 function OrdersPageInner() {
   const searchParams = useSearchParams();
   const tableId = searchParams.get('table');
