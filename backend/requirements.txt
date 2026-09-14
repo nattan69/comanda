@@ -7,5 +7,6 @@ pydantic-settings
 alembic
 python-dotenv
 httpx
+python-jose
 pytest
 python-multipart
