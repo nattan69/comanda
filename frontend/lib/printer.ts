@@ -100,3 +100,18 @@ export async function imprimeixTiquetServei(
   if (!res.ok) throw new Error(`Error ${res.status} generant el tiquet de servei`);
   return printEscpos(await res.arrayBuffer());
 }
+
+/**
+ * Imprimeix el TIQUET DE CUINA d'una comanda (decisió Tomeu 14/09/2026).
+ * Només plats i modificacions, sense imports — lletra gran per llegir de lluny.
+ * El check «Imprimir la comanda a la CUINA» de la Comandera controla si es crida.
+ */
+export async function imprimeixTiquetCuina(orderId: string): Promise<'gateway' | 'webusb'> {
+  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const token = typeof window !== 'undefined' ? localStorage.getItem('comanda-token') || '' : '';
+  const res = await fetch(`${API}/orders/${orderId}/tiquet-cuina?format=escpos`,
+    { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Error ${res.status} generant el tiquet de cuina`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  return printEscpos(bytes);
+}

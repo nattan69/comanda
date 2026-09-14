@@ -176,6 +176,18 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 }
 
 export const api = {
+  /**
+   * ENVIA la comanda a CUINA (decisió Tomeu 14/09/2026): els plats van al KDS
+   * de la cuina i, si `imprimir`, s'imprimeix el tiquet de cuina (només plats i
+   * modificacions, sense imports) a la impressora del departament.
+   */
+  async enviarCuina(orderId: string, imprimir = true) {
+    return apiRequest<{ ok: boolean; enviat: number; text: string }>(
+      `/orders/${orderId}/enviar-cuina`,
+      { method: 'POST', body: JSON.stringify({ imprimir }) },
+    );
+  },
+
   // ---------- Auth (PIN) ----------
   /**
    * Bescanvia un token del porter de Jornada/Jornals per una sessió de Comanda.
@@ -485,6 +497,20 @@ export const apiEstablishment = {
 };
 
 export const apiOrdersExt = {
+  /** ENVIA la comanda a CUINA: els plats (KDS) i, si es vol, imprimeix el tiquet. */
+  async enviarCuina(orderId: string, imprimir = true, lineIds?: string[]) {
+    return apiRequest<{ ok: boolean; enviat: number; text: string }>(
+      `/orders/${orderId}/enviar-cuina`,
+      { method: 'POST', body: JSON.stringify({ imprimir, line_ids: lineIds || null }) },
+    );
+  },
+  /** Tiquet de CUINA (només plats i modificacions, sense imports). */
+  async tiquetCuina(orderId: string): Promise<string> {
+    const res = await fetch(`${API_BASE_URL}/orders/${orderId}/tiquet-cuina?format=text`,
+      { headers: authHeaders() });
+    if (!res.ok) throw new Error(`Error ${res.status} generant el tiquet de cuina`);
+    return res.text();
+  },
   /** Tiquet de SERVEI (sense dades fiscals) per portar a taula. */
   async tiquetServei(orderId: string, inclouAnterior = true): Promise<string> {
     const q = `?inclou_anterior=${inclouAnterior}`;

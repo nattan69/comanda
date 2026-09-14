@@ -14,7 +14,11 @@ import { IdiomaProvider } from '@/lib/idioma';
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (pathname?.startsWith('/comandera')) {
+  // La COMANDERA (app dels cambrers) i el KDS (pantalla de cuina) NO porten
+  // aquest shell: són pantalles aïllades, a pantalla completa, sense sidebar.
+  // (El KDS va a un monitor/tablet de cuina — el sidebar d'escriptori només
+  // hi fa nosa i trenca la llegibilitat de lluny.)
+  if (pathname?.startsWith('/comandera') || pathname?.startsWith('/kds')) {
     return <>{children}</>;
   }
 

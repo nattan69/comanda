@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 from typing import Optional, List
 from datetime import datetime, date
 from uuid import UUID
@@ -235,6 +235,19 @@ class OrderItemOut(OrderItemCreate):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     status: str
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def name(self) -> str:
+        """Nom de l'article (àlies de name_snapshot) — el front i el KDS el llegeixen
+        com a `name`. El snapshot és el nom congelat en el moment de la comanda."""
+        return self.name_snapshot or "Article"
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def total(self) -> float:
+        """Import de la línia (preu × quantitat) — còmode per al front/KDS."""
+        return round(float(self.price_snapshot or 0) * int(self.quantity or 0), 2)
 
 
 class OrderCreate(BaseModel):

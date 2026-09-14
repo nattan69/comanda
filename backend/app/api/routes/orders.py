@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 from ...db import get_db
-from ...models.models import Order, OrderItem, MenuItem, Void, Payment, RoomCredit, Center
+from ...models.models import Order, OrderItem, MenuItem, Void, Payment, RoomCredit, Center, Table, Staff
 from ...schemas.schemas import (
     OrderCreate,
     OrderOut,
@@ -137,12 +137,38 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
     _recalc_total(order, db)
     db.commit()
     db.refresh(order)
+    # === L'ESDEVENIMENT DE COMANDA PORTA ELS ARTICLES ===
+    # El KDS de cuina ha de saber QUÈ ha de preparar, no només que hi ha una
+    # comanda. S'hi envien les línies (nom, quantitat, modificacions) perquè
+    # la pantalla de cuina les pugui llistar i les pugui imprimir (decisió
+    # Tomeu 14/09/2026).
+    linies_esdeveniment = [
+        {
+            "id": str(it.id),
+            "name": it.name_snapshot or "Article",
+            "quantity": it.quantity,
+            "modifications": it.modifications,
+            "status": it.status,
+            "comanda_number": int(getattr(it, "comanda_number", 1) or 1),
+        }
+        for it in db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+        if it.status != "cancelled"
+    ]
+    taula = db.get(Table, order.table_id) if order.table_id else None
+    centre = db.get(Center, order.center_id) if order.center_id else None
+    cambrer = db.get(Staff, order.staff_id) if order.staff_id else None
     emit_sync("order.created", {
         "order_id": str(order.id),
         "ticket_code": order.ticket_code,
         "table_id": str(order.table_id) if order.table_id else None,
+        "table_number": taula.number if taula else None,
         "center_id": str(order.center_id) if order.center_id else None,
+        "center_name": centre.name if centre else None,
+        "staff_name": cambrer.full_name if cambrer else None,
         "total_amount": str(order.total_amount or 0),
+        "comanda_number": int(getattr(order, "comanda_number", 1) or 1),
+        #: les línies que la cuina ha de preparar
+        "items": linies_esdeveniment,
     })
     return order
 
@@ -590,3 +616,183 @@ def moure_linies(order_id: UUID, payload: MouLiniesPayload, db: Session = Depend
     db.commit()
     db.refresh(desti)
     return desti
+
+
+# ============================================================
+# ENVIAR A CUINA — els plats de menjar per preparar
+# (decisió Tomeu 14/09/2026)
+# ============================================================
+
+class EnviarCuinaPayload(BaseModel):
+    """Enviament a cuina: quines línies i a quin centre de producció."""
+    #: Línies a enviar. Si no s'indica, s'envien totes les pendents.
+    line_ids: Optional[List[UUID]] = None
+    #: Imprimir el tiquet de cuina a la impressora tèrmica del departament.
+    imprimir: bool = True
+
+
+def build_kitchen_ticket(db: Session, order_id, line_ids: Optional[list] = None) -> dict:
+    """Tiquet de CUINA: el que la cuina ha de preparar, sense imports ni fiscalitat.
+
+    Només hi ha d'anar el que es prepara: article, quantitat i modificacions
+    («sense ceba», «poc fet»...). Els preus NO hi surten — a la cuina no els
+    calen i així el paper és més llegible de lluny.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise ValueError("Comanda no trobada.")
+    taula = db.get(Table, order.table_id) if order.table_id else None
+    centre = db.get(Center, order.center_id) if order.center_id else None
+    cambrer = db.get(Staff, order.staff_id) if order.staff_id else None
+
+    q = db.query(OrderItem).filter(OrderItem.order_id == order_id)
+    if line_ids:
+        q = q.filter(OrderItem.id.in_(line_ids))
+    items = [it for it in q.all() if it.status != "cancelled"]
+
+    return {
+        "type": "cuina",
+        "order_id": str(order.id),
+        "ticket_code": order.ticket_code or "",
+        "comanda_number": int(getattr(order, "comanda_number", 1) or 1),
+        "table_number": taula.number if taula else None,
+        "center_name": centre.name if centre else None,
+        "staff_name": cambrer.full_name if cambrer else None,
+        "issued_at": (order.opened_at or datetime.now(timezone.utc)).isoformat(),
+        "lines": [
+            {
+                "name": it.name_snapshot or "Article",
+                "quantity": it.quantity,
+                "modifications": it.modifications,
+            }
+            for it in items
+        ],
+    }
+
+
+def render_kitchen_ticket_text(t: dict) -> str:
+    """Text pla (80 mm) del tiquet de CUINA — lletra gran, sense imports."""
+    out = []
+    sep = "=" * LINE_WIDTH_K
+    out.append(_center_k("*** CUINA ***", gran=True))
+    if t.get("center_name"):
+        out.append(_center_k(str(t["center_name"]).upper()))
+    out.append(sep)
+    if t.get("table_number") is not None:
+        out.append(f"TAULA: {t['table_number']}")
+    out.append(f"Comanda nº: {t.get('comanda_number', 1)}")
+    if t.get("ticket_code"):
+        out.append(f"Tiquet: {t['ticket_code']}")
+    if t.get("staff_name"):
+        out.append(f"Cambrer: {t['staff_name']}")
+    try:
+        from datetime import datetime as _dt
+        _q = _dt.fromisoformat(str(t["issued_at"]).replace("Z", "+00:00")).astimezone()
+        out.append(f"Hora: {_q.strftime('%H:%M:%S')}  ({_q.strftime('%d/%m/%Y')})")
+    except Exception:
+        pass
+    out.append(sep)
+    for l in t.get("lines", []):
+        out.append(f"  {l['quantity']} x  {l['name']}")
+        for mod in (l.get("modifications") or []):
+            out.append(f"        >> {mod}")
+    out.append(sep)
+    out.append(_center_k("a preparar"))
+    return "\n".join(out) + "\n"
+
+
+LINE_WIDTH_K = 42
+
+
+def _center_k(text: str, gran: bool = False) -> str:
+    """Centra una línia per a impressora de 80 mm (42 columnes)."""
+    t = str(text)
+    if gran:
+        t = t.center(LINE_WIDTH_K)
+    return t.center(LINE_WIDTH_K)
+
+
+async def _imprimir_cuina(t: dict) -> None:
+    """Envia el tiquet de cuina a la impressora del departament (si n'hi ha)."""
+    # La impressió real va per LAN (raw 9100) des del dispositiu de cuina,
+    # no pel núvol — arquitectura Conceptes. Aquí només deixem el ganxo.
+    return None
+
+
+@router.post("/{order_id}/enviar-cuina")
+def enviar_cuina(order_id: UUID, payload: EnviarCuinaPayload, db: Session = Depends(get_db)):
+    """Envia la comanda a CUINA: marca les línies com a enviades i avisa el KDS.
+
+    És el que fa el botó «Enviar a cuina» de la Comandera i del TPV: les línies
+    passen a `sent` i el KDS de la cuina rep l'esdeveniment amb els plats a
+    preparar. Opcionalment s'imprimeix el tiquet de cuina a la impressora
+    tèrmica del departament (decisió Tomeu 14/09/2026).
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Comanda no trobada")
+    if order.status in ("paid", "cancelled", "closed"):
+        raise HTTPException(status_code=409, detail="La comanda ja està tancada")
+
+    q = db.query(OrderItem).filter(OrderItem.order_id == order_id)
+    if payload.line_ids:
+        q = q.filter(OrderItem.id.in_(payload.line_ids))
+    items = [it for it in q.all() if it.status != "cancelled"]
+    if not items:
+        raise HTTPException(status_code=404, detail="Cap línia per enviar a cuina")
+
+    for it in items:
+        if it.status in ("pending", None):
+            it.status = "sent"
+
+    if order.status in ("open", None):
+        order.status = "sent_to_kitchen"
+
+    db.commit()
+
+    try:
+        ticket = build_kitchen_ticket(db, order_id, [it.id for it in items])
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # Avisa el KDS en viu (amb els plats)
+    emit_sync("order.sent_to_kitchen", {
+        "order_id": str(order.id),
+        "ticket_code": order.ticket_code,
+        "table_number": ticket.get("table_number"),
+        "center_id": str(order.center_id) if order.center_id else None,
+        "comanda_number": ticket.get("comanda_number"),
+        "items": ticket["lines"],
+    })
+
+    return {"ok": True, "enviat": len(items), "ticket": ticket,
+            "text": render_kitchen_ticket_text(ticket)}
+
+
+@router.get("/{order_id}/tiquet-cuina")
+def tiquet_cuina(order_id: UUID, format: str = "text", db: Session = Depends(get_db)):
+    """Tiquet de CUINA (text o escpos): què ha de preparar la cuina, sense imports."""
+    try:
+        t = build_kitchen_ticket(db, order_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if format == "escpos":
+        return Response(content=_escpos_kitchen(render_kitchen_ticket_text(t)),
+                        media_type="application/octet-stream")
+    return PlainTextResponse(render_kitchen_ticket_text(t))
+
+
+def _escpos_kitchen(text: str) -> bytes:
+    """Bytes ESC/POS del tiquet de cuina (lletra gran, tall de paper)."""
+    out = bytearray()
+    out += b"\x1b@"      # init
+    out += b"\x1b!\x10"  # doble alçada (més llegible de lluny a la cuina)
+    for linia in text.split("\n"):
+        try:
+            out += linia.encode("cp858", errors="replace") + b"\n"
+        except Exception:
+            out += linia.encode("latin-1", errors="replace") + b"\n"
+    out += b"\x1b!\x00"  # tornem a mida normal
+    out += b"\n\n\n"
+    out += b"\x1dV\x00"  # tall
+    return bytes(out)

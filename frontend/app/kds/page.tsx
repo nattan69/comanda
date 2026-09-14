@@ -84,7 +84,13 @@ export default function Kds() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="text-2xl font-bold" style={{ color: '#e5e9f0' }}>
-                      Taula {c.table_id ? c.table_id.slice(0, 6) : '—'}
+                      {/* El NOMBRE de taula (M1, T3...), no l'UUID! */}
+                      Taula {c.table_number ?? '—'}
+                      {c.comanda_number ? (
+                        <span className="ml-2 text-base" style={{ color: '#e2b04a' }}>
+                          #{c.comanda_number}
+                        </span>
+                      ) : null}
                     </div>
                     {nomCentre(c.centre) && (
                       <div className="text-xs mt-1" style={{ color: '#9aa7b8' }}>{nomCentre(c.centre)}</div>
@@ -97,11 +103,24 @@ export default function Kds() {
 
                 <div className="flex-1 space-y-2 mb-4">
                   {c.items.length > 0 ? c.items.map((it, i) => (
-                    <div key={i} className="flex items-baseline gap-3">
+                    <div key={i} className="flex items-baseline gap-3 flex-wrap">
                       <span className="text-2xl font-bold" style={{ color: '#e2b04a', minWidth: 40 }}>
                         {it.quantity}×
                       </span>
-                      <span className="text-lg" style={{ color: '#e5e9f0' }}>{it.name}</span>
+                      <div className="flex-1">
+                        <span className="text-lg" style={{ color: '#e5e9f0' }}>{it.name}</span>
+                        {/* Modificacions: «sense ceba», «poc fet»... — la cuina les ha de veure */}
+                        {Array.isArray(it.modifications) && it.modifications.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {it.modifications.map((m, j) => (
+                              <span key={j} className="px-2 py-0.5 rounded-lg text-sm font-bold"
+                                style={{ background: 'rgba(239,68,68,.18)', color: '#fca5a5' }}>
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )) : (
                     <div className="text-sm" style={{ color: '#64748b' }}>carregant detall…</div>

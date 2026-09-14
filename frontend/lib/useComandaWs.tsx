@@ -26,6 +26,8 @@ export type WsEvent = {
 type Handlers = {
   onOrderCreated?: (e: WsEvent) => void;
   onOrderPaid?: (e: WsEvent) => void;
+  /** La comanda s'ha enviat explícitament a cuina (botó «Enviar a cuina»). */
+  onOrderSentToKitchen?: (e: WsEvent) => void;
   onStatus?: (status: 'connectant' | 'viu' | 'caigut') => void;
 };
 
@@ -58,6 +60,7 @@ export function useComandaWs(handlers: Handlers) {
             const ev: WsEvent = JSON.parse(msg.data as string);
             if (ev.type === 'order.created') h.current.onOrderCreated?.(ev);
             else if (ev.type === 'order.paid') h.current.onOrderPaid?.(ev);
+            else if (ev.type === 'order.sent_to_kitchen') h.current.onOrderSentToKitchen?.(ev);
           } catch { /* missatge no JSON — ignora */ }
         };
         ws.onclose = () => {

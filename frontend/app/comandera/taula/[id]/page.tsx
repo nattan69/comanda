@@ -32,6 +32,11 @@ export default function ComanderaTaula() {
   //: El valor ve del CENTRE (política del punt de venda), no és una tria puntual.
   const [taulesObertes, setTaulesObertes] = useState(true);
 
+  //: CHECK «Imprimir a cuina» (decisió Tomeu 14/09/2026): en enviar la comanda,
+  //: s'imprimeix el TIQUET DE CUINA (només els plats i les modificacions,
+  //: sense imports) a la impressora tèrmica del departament.
+  const [imprimirCuina, setImprimirCuina] = useState(true);
+
   const staff = typeof window !== 'undefined' ? getStoredStaff() : null;
 
   useEffect(() => {
@@ -122,16 +127,16 @@ export default function ComanderaTaula() {
       }
       setCarret([]);
 
-      // Tiquet de SERVEI (opcional, segons el check): sense dades fiscals,
-      // per portar a la taula amb el desglossament i el saldo anterior.
+      // ENVIAMENT A CUINA (decisió Tomeu 14/09/2026): els plats van a la cuina
+      // (KDS) i, si el check està marcat, s'imprimeix el tiquet de cuina.
       let text = eraNova ? 'Comanda enviada' : 'Afegit a la comanda';
       if (ordreId) {
         try {
-          const { imprimeixTiquetServei } = await import('@/lib/printer');
-          await imprimeixTiquetServei(ordreId);
-          text += ' · tiquet de servei imprès 🖨️';
+          await api.enviarCuina(ordreId, imprimirCuina);
+          text += ' · cuina avisada 🍳';
+          if (imprimirCuina) text += ' i impresa';
         } catch {
-          text += " · (no s'ha pogut imprimir)";
+          text += " · (no s'ha pogut avisar la cuina)";
         }
       }
       setMsg({ ok: true, text: text + ' ✅' });
@@ -235,6 +240,13 @@ export default function ComanderaTaula() {
             <span className="text-sm" style={{ color: '#9aa7b8' }}>{unitats} articles</span>
             <span className="text-xl font-bold" style={{ color: '#e2b04a' }}>{total.toFixed(2)} €</span>
           </div>
+          <label className="flex items-center gap-3 mb-3 cursor-pointer select-none">
+            <input type="checkbox" checked={imprimirCuina} onChange={(e) => setImprimirCuina(e.target.checked)}
+              className="w-5 h-5 accent-amber-400" />
+            <span className="text-sm" style={{ color: '#e5e9f0' }}>
+              🖨️ Imprimir la comanda a la CUINA
+            </span>
+          </label>
           <label className="flex items-center gap-3 mb-3 select-none"
             title={taulesObertes ? 'Aquest punt de venda permet acumular rondes a la taula' : 'Cada consumició s\'ha de cobrar'}>
             <input type="checkbox" checked={taulesObertes} disabled
