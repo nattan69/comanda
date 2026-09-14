@@ -20,6 +20,11 @@ export type WsEvent = {
     method?: string;
     amount?: string | number;
     total_amount?: string | number;
+    items?: { name: string; quantity: number; modifications?: string[] | null; comanda_number?: number }[];
+    table_number?: string | number | null;
+    center_name?: string | null;
+    staff_name?: string | null;
+    comanda_number?: number;
   };
 };
 
