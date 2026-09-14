@@ -112,9 +112,24 @@ export type DayClosure = {
   created_at?: string;
 };
 
+/**
+ * URL base de l'API.
+ *
+ * ⚠️ MAI cau a `localhost` en producció (catch 14/09/2026): quan el front es
+ * desplega a `comanda.sapedrera.eu` i es compila sense NEXT_PUBLIC_API_URL, el
+ * navegador del cambrer intentava cridar EL SEU PROP localhost → res no
+ * carregava (centres, taules...). El patró correcte (el d'Estada) és:
+ *   · si hi ha NEXT_PUBLIC_API_URL → es fa servir
+ *   · si no → RUTA RELATIVA (`/api/v1`), que va al mateix domini i el
+ *     servidor de Caddy/túnel ja la reenvia al backend.
+ */
 const API_BASE_URL =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) ||
-  'http://localhost:8000/api/v1';
+  typeof window === 'undefined'
+    // Al SERVIDOR (SSR) cal URL absoluta; mateix host que el backend.
+    ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1')
+    // Al NAVEGADOR va RELATIVA: el proxy de next.config.js la reenvia al backend.
+    // (Mai localhost — al mòbil del cambrer no hi ha res allà.)
+    : (process.env.NEXT_PUBLIC_API_URL || '/api/v1');
 
 const TOKEN_KEY = 'comanda-token';
 const STAFF_KEY = 'comanda-staff';

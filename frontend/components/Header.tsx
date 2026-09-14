@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiCarta, apiEstablishment, Center } from '@/lib/api';
+import { api, apiCarta, apiEstablishment, getStoredStaff, Center } from '@/lib/api';
 import { useIdioma } from '@/lib/idioma';
 import { Lang } from '@/lib/i18n';
 
@@ -21,6 +21,10 @@ export default function Header() {
   const [centre, setCentre] = useState<string>('');
   // Nom de la PROPIETAT/Hotel (decisió Tomeu 14/09/2026): ex. «Hotel Sa Ràpita ****»
   const [hotel, setHotel] = useState<string>('');
+  //: Torn del cambrer al centre triat (el panell de cambrers compta els torns
+  //: OBERTS — si no se n'obre cap, el panell surt buit). Catch 14/09/2026.
+  const [torn, setTorn] = useState<{ id: string; center_name?: string | null } | null>(null);
+  const [msgTorn, setMsgTorn] = useState<string | null>(null);
   const [ara, setAra] = useState<Date | null>(null);
 
   // rellotge en viu (1 s). Null al primer render per evitar desajust d'hidratació.
@@ -42,13 +46,38 @@ export default function Header() {
     apiCarta.getCenters().then((cs) => {
       setCentres(cs);
       const desat = typeof window !== 'undefined' ? localStorage.getItem('comanda-centre') : null;
-      setCentre(desat || (cs[0]?.id ?? ''));
+      const actiu = desat || (cs[0]?.id ?? '');
+      setCentre(actiu);
+      // obrim el torn del cambrer al centre actiu (perquè compti al panell)
+      if (actiu) void obreTorn(actiu);
     }).catch(() => {});
   }, []);
+
+  /**
+   * OBRE EL TORN del cambrer al centre triat.
+   *
+   * Sense torn obert, el cambrer no compta com a «de servei» al panell de
+   * cambrers i les comandes no queden lligades al seu torn. A l'escriptori això
+   * no passava perquè el login no obria torn (catch de Tomeu 14/09/2026).
+   */
+  const obreTorn = async (id: string) => {
+    const jo = getStoredStaff();
+    if (!jo?.id || !id) return;
+    try {
+      const t = await api.openShift(jo.id, id);
+      setTorn({ id: t.id, center_name: (t as { center_name?: string | null }).center_name });
+      setMsgTorn(null);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : '';
+      // Si ja en tenia un d'obert, no és cap error: hi som de servei.
+      setMsgTorn(m.includes('ja té un torn') ? null : (m || 'No s\'ha pogut obrir el torn'));
+    }
+  };
 
   const triaCentre = (id: string) => {
     setCentre(id);
     try { localStorage.setItem('comanda-centre', id); } catch { /* privat */ }
+    void obreTorn(id);
   };
 
   const dataHora = ara
@@ -91,6 +120,19 @@ export default function Header() {
           ))}
         </select>
       </div>
+
+      {/* estat del torn */}
+      {torn ? (
+        <span className="text-xs px-2 py-1 rounded-lg"
+          style={{ background: 'rgba(34,197,94,.15)', color: '#86efac' }}>
+          🟢 torn obert
+        </span>
+      ) : msgTorn ? (
+        <span className="text-xs px-2 py-1 rounded-lg"
+          style={{ background: 'rgba(239,68,68,.15)', color: '#fca5a5' }}>
+          ⚠️ {msgTorn}
+        </span>
+      ) : null}
 
       <div className="flex-1" />
 
