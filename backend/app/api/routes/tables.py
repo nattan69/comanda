@@ -26,7 +26,19 @@ def list_areas(center_id: Optional[UUID] = None, db: Session = Depends(get_db)):
     q = db.query(Area)
     if center_id:
         q = q.filter(Area.center_id == center_id)
-    return q.order_by(Area.name).all()
+    arees = q.order_by(Area.name).all()
+    # comptador de taules per zona (per la pantalla de gestió de zones)
+    comptes = dict(
+        db.query(Table.area_id, func.count(Table.id))
+        .group_by(Table.area_id)
+        .all()
+    )
+    sortida = []
+    for a in arees:
+        d = AreaOut.model_validate(a)
+        d.table_count = int(comptes.get(a.id, 0))
+        sortida.append(d)
+    return sortida
 
 
 @router.post("/areas", response_model=AreaOut, status_code=status.HTTP_201_CREATED)
@@ -111,6 +123,26 @@ def update_area(area_id: UUID, payload: AreaUpdate, db: Session = Depends(get_db
     db.commit()
     db.refresh(area)
     return area
+
+
+@router.delete("/areas/{area_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_area(area_id: UUID, db: Session = Depends(get_db)):
+    """Esborra una zona. NO deixa taules òrfenes: si en té, es rebutja.
+
+    Per a un restaurant, esborrar una zona amb taules dins seria perdre el pla
+    de sala per accident (decisió Tomeu 15/09/2026).
+    """
+    area = db.get(Area, area_id)
+    if not area:
+        raise HTTPException(status_code=404, detail="Àrea no trobada")
+    n = db.query(Table).filter(Table.area_id == area_id).count()
+    if n:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La zona «{area.name}» té {n} taula(es). Mou-les a una altra zona o esborra-les abans.",
+        )
+    db.delete(area)
+    db.commit()
 
 
 @router.get("", response_model=List[TableOut])

@@ -500,10 +500,25 @@ export const apiTable = {
   async voidLine(orderId: string, lineId: string) {
     return apiRequest(`/orders/${orderId}/items/${lineId}/void`, { method: 'POST' });
   },
-  /** Crea una àrea nova (barra, interior, terrassa...). */
-  async createArea(dades: { name: string; position_x?: number; position_y?: number;
+  /**
+   * Crea una zona nova (barra, interior, terrassa...) DINS d'un punt de venda.
+   * `center_id` és imprescindible: sense ell la zona queda òrfena i no surt a
+   * cap centre (catch 15/09/2026 — les 3 zones de la BD el tenien NULL).
+   */
+  async createArea(dades: { name: string; center_id?: string | null;
+                            position_x?: number; position_y?: number;
                             surcharge_percent?: number }): Promise<Area> {
     return apiRequest<Area>('/tables/areas', { method: 'POST', body: JSON.stringify(dades) });
+  },
+  /** Modifica una zona (nom, recàrrec, posició). */
+  async updateArea(areaId: string, dades: { name?: string; center_id?: string | null;
+                                            surcharge_percent?: number;
+                                            position_x?: number; position_y?: number }): Promise<Area> {
+    return apiRequest<Area>(`/tables/areas/${areaId}`, { method: 'PATCH', body: JSON.stringify(dades) });
+  },
+  /** Esborra una zona (el backend rebutja si encara té taules). */
+  async deleteArea(areaId: string): Promise<void> {
+    await apiRequest<void>(`/tables/areas/${areaId}`, { method: 'DELETE' });
   },
 };
 

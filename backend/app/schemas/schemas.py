@@ -70,6 +70,8 @@ class AreaCreate(AreaBase):
 class AreaOut(AreaBase):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
+    #: Quantes taules té la zona (ho compten les rutes; útil per a la UI de gestió)
+    table_count: int = 0
 
 
 class TableBase(BaseModel):

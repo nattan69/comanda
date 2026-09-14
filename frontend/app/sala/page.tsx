@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api, apiTable, Table, Area, TableComanda } from '@/lib/api';
 import { useComandaWs, WsBadge } from '@/lib/useComandaWs';
 import PlaSala from '@/components/PlaSala';
+import GestioAreas from '@/components/GestioAreas';
 import PanellCambrers from '@/components/PanellCambrers';
 import ModalTaula from '@/components/ModalTaula';
 import ModalCobrar from '@/components/ModalCobrar';
@@ -27,6 +28,8 @@ export default function SalaPage() {
   const [cobrant, setCobrant] = useState<{ id: string; total: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [carregant, setCarregant] = useState(true);
+  //: Gestió de zones (crear/editar/esborrar les zones del punt de venda)
+  const [gestioOberta, setGestioOberta] = useState(false);
   //: Centre actiu (el del selector «Tria el punt de venda» del header).
   //: La distribució del pla de sala és PER CENTRE (decisió Tomeu 14/09/2026):
   //: en canviar de centre, es recarrega el pla d'aquell punt de venda.
@@ -101,9 +104,9 @@ export default function SalaPage() {
           style={{ background: 'rgba(239,68,68,.15)', color: '#fca5a5' }}>{msg}</div>
       )}
 
-      {/* selector d'àrees */}
-      {arees.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-3 mb-2">
+      {/* selector d'àrees + gestió de zones */}
+      <div className="flex gap-2 overflow-x-auto pb-3 mb-2 items-center">
+        {arees.length > 0 && (
           <button onClick={() => setAreaActiva('')}
             className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
             style={{
@@ -112,22 +115,30 @@ export default function SalaPage() {
             }}>
             Totes ({(taules || []).length})
           </button>
-          {arees.map((a) => {
-            const n = taules.filter((t) => t.area_id === a.id).length;
-            return (
-              <button key={a.id} onClick={() => setAreaActiva(a.id)}
-                className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
-                style={{
-                  background: areaActiva === a.id ? '#e2b04a' : 'rgba(255,255,255,.07)',
-                  color: areaActiva === a.id ? '#1a1a2e' : '#e5e9f0',
-                }}>
-                {a.name} ({n})
-                {Number(a.surcharge_percent) > 0 ? ` +${a.surcharge_percent}%` : ''}
-              </button>
-            );
-          })}
-        </div>
-      )}
+        )}
+        {arees.map((a) => {
+          const n = taules.filter((t) => t.area_id === a.id).length;
+          return (
+            <button key={a.id} onClick={() => setAreaActiva(a.id)}
+              className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
+              style={{
+                background: areaActiva === a.id ? '#e2b04a' : 'rgba(255,255,255,.07)',
+                color: areaActiva === a.id ? '#1a1a2e' : '#e5e9f0',
+              }}>
+              {a.name} ({n})
+              {Number(a.surcharge_percent) > 0 ? ` +${a.surcharge_percent}%` : ''}
+            </button>
+          );
+        })}
+        {/* GESTIÓ DE ZONES: crear/editar/esborrar les zones del punt de venda */}
+        <button onClick={() => setGestioOberta(true)}
+          title="Gestionar les zones del punt de venda (barra, interior, terrassa...)"
+          className="shrink-0 px-3 py-2 rounded-xl text-sm font-semibold ml-auto"
+          style={{ background: 'rgba(226,176,74,.15)', color: '#e2b04a',
+                   border: '1px solid rgba(226,176,74,.35)' }}>
+          ⚙️ Zones
+        </button>
+      </div>
 
       {carregant ? (
         <div className="py-16 text-center text-sm" style={{ color: '#9aa7b8' }}>Carregant el pla de sala…</div>
