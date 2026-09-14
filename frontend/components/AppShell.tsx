@@ -46,6 +46,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Calculator size={20} className="text-brand-gold group-hover:scale-110 transition-transform" />
             <span>Tancament del dia</span>
           </Link>
+          <Link href="/kds" className="flex items-center gap-3 p-3 rounded-lg hover:bg-brand-gold/10 text-white transition-colors group">
+            <LayoutDashboard size={20} className="text-brand-gold group-hover:scale-110 transition-transform" />
+            <span>KDS (cuina)</span>
+          </Link>
           <Link href="/comandera" className="flex items-center gap-3 p-3 rounded-lg hover:bg-brand-gold/10 text-white transition-colors group">
             <LayoutDashboard size={20} className="text-brand-gold group-hover:scale-110 transition-transform" />
             <span>Comandera (cambrers)</span>
