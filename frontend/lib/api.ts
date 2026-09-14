@@ -120,6 +120,36 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
 
 export const api = {
   // ---------- Auth (PIN) ----------
+  /**
+   * Bescanvia un token del porter de Jornada/Jornals per una sessió de Comanda.
+   * (Un sol PIN pel cambrer — decisió Tomeu 14/09/2026.)
+   */
+  /** Obre el torn d'un cambrer en un centre (contracte: POST /shifts/open). */
+  async openShift(staffId: string, centerId: string): Promise<Shift> {
+    return apiRequest<Shift>('/shifts/open', {
+      method: 'POST',
+      body: JSON.stringify({ staff_id: staffId, center_id: centerId }),
+    });
+  },
+
+  async sessionExchange(jornadaToken: string, deviceName = 'Comandera'): Promise<{
+    token: string; staff: Staff; center_external_id?: string | null; reused?: boolean;
+  }> {
+    const res = await fetch(`${API_BASE_URL}/staff/session-exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jornada_token: jornadaToken, device_name: deviceName }),
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => null);
+      throw new Error(typeof b?.detail === 'string' ? b.detail : `Error ${res.status} bescanviant el token`);
+    }
+    const data = await res.json();
+    localStorage.setItem('comanda-token', data.token);
+    localStorage.setItem('comanda-staff', JSON.stringify(data.staff));
+    return data;
+  },
+
   async login(pin: string, deviceName?: string): Promise<{ token: string; staff: Staff }> {
     const data = await apiRequest<{ token: string; staff?: Staff; access_token?: string }>(
       '/staff/login',

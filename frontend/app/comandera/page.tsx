@@ -1,23 +1,48 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, getStoredStaff } from '@/lib/api';
 
 /**
- * COMANDERA — l'app dels cambrers (PWA). Login PIN optimitzat per mòbil/PDA:
+ * COMANDERA — l'app dels cambrers (PWA). Login optimitzat per mòbil/PDA:
  * teclat gran, un dit, i amb la informació del torn a la vista.
- * Contracte: POST /api/v1/staff/login { pin, device_name } → token + staff.
+ *
+ * DUES VIES D'ENTRADA (porter únic, decisió Tomeu 14/09/2026):
+ *  1. PIN directe de Comanda (sempre disponible — clients sense Jornada)
+ *  2. ?jornada_token=... → el token que emet el portal de Jornada/Jornals al
+ *     fitxar. El bescanviem i entram directament. Un sol PIN pel cambrer.
  */
-export default function ComanderaLogin() {
+
+function LoginComandera() {
   const router = useRouter();
+  const params = useSearchParams();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Via 2: arribam amb un token del porter de Jornada → bescanvi directe
   useEffect(() => {
-    if (getStoredStaff()) router.replace('/comandera/sala');
-  }, [router]);
+    const jornadaToken = params.get('jornada_token') || params.get('comanda_token');
+    if (!jornadaToken) {
+      if (getStoredStaff()) router.replace('/comandera/sala');
+      return;
+    }
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api.sessionExchange(jornadaToken, 'Comandera');
+        // netejar el token de la URL (no ha de quedar a l'historial)
+        window.history.replaceState({}, '', '/comandera');
+        if (res.center_external_id) {
+          sessionStorage.setItem('comandera-centre-fitxat', res.center_external_id);
+        }
+        router.replace('/comandera/sala');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'El token de Jornada no és vàlid');
+      } finally { setLoading(false); }
+    })();
+  }, [params, router]);
 
   const submit = async (valor?: string) => {
     const p = valor ?? pin;
@@ -92,5 +117,22 @@ export default function ComanderaLogin() {
         Afegeix-la a la pantalla d&apos;inici per tenir-la com una app
       </p>
     </div>
+  );
+}
+/**
+ * Next.js exigeix un límit de Suspense al voltant de useSearchParams
+ * (en cas contrari el build de producció falla amb "useSearchParams()
+ * should be wrapped in a suspense boundary").
+ */
+export default function ComanderaLoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="fixed inset-0 flex items-center justify-center"
+        style={{ background: '#1a1a2e', color: '#9aa7b8' }}>
+        Carregant…
+      </div>
+    }>
+      <LoginComandera />
+    </Suspense>
   );
 }

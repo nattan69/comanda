@@ -57,18 +57,38 @@ export default function ComanderaSala() {
     const jo = getStoredStaff();
     if (!jo) return;
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/shifts/open`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('comanda-token') || ''}` },
-        body: JSON.stringify({ staff_id: jo.id, center_id: centerId }),
-      });
-      if (!res.ok) {
-        const b = await res.json().catch(() => null);
-        throw new Error(typeof b?.detail === 'string' ? b.detail : `Error ${res.status}`);
-      }
+      await api.openShift(jo.id, centerId);
       carrega();
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Error obrint torn'); }
   };
+
+  /**
+   * PORTER ÚNIC (decisió Tomeu 14/09/2026): si hem entrat amb el token de
+   * Jornada, aquest porta el centre on el cambrer està FITXAT. Obrim el torn
+   * allà directament — el cambrer no ha de triar res.
+   * Si no hi ha centre fitxat, cau al selector manual (compatible enrere).
+   */
+  const obreTornDelFitxatge = async () => {
+    const centreFitxat = typeof window !== 'undefined'
+      ? sessionStorage.getItem('comandera-centre-fitxat')
+      : null;
+    if (!centreFitxat) return;
+    // el centre del token ve com a external_id de Jornada: cal trobar el centre local
+    const match = centres.find(
+      (c) => c.id === centreFitxat || c.external_id === centreFitxat || c.name === centreFitxat,
+    );
+    if (match) {
+      sessionStorage.removeItem('comandera-centre-fitxat');
+      await obreTorn(match.id);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading && !torn && centres.length > 0) {
+      void obreTornDelFitxatge();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, torn, centres.length]);
 
   const centreNom = (id?: string | null) => centres.find((c) => c.id === id)?.name || '—';
   const ocupada = (t: Taula) => t.status === 'occupied';
