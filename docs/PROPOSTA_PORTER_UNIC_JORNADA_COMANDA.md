@@ -4,6 +4,40 @@
 
 ---
 
+## 0. ⚠️ HI HA DUES VERSIONS DE JORNADA — el porter s'ha d'implantar a TOTES DUES
+
+Aquesta és la primera cosa que cal tenir clara, perquè canvia l'abast de la feina.
+A l'ecosistema hi ha **dues implementacions diferents** del portal de l'empleat:
+
+| | **A) Jornada** (producte standalone) | **B) Jornals — Portal de l'Empleat** |
+|---|---|---|
+| **Repo** | `nattan69/jornada` | `nattan69/jornals` (`app/portal/`) |
+| **Prefix del portal** | `/api/portal` | (rutes pròpies del mòdul `portal`) |
+| **Login per PIN** | ✅ `POST /api/portal/login` → `{empleado_id, nombre, rol, departamento_id}` | ✅ (via `empleado_id`; el portal és **més desenvolupat**: perfil, foto, comunicacions, vacances, contracte, **firma digital amb PIN**) |
+| **Model d'empleat** | `Empleado` (pin) | `Empleado` (pin + tot el mòdul RRHH al darrere) |
+| **Estat** | Lean, acabat just | **Més desenvolupat** (és el portal ric) |
+
+**Conseqüència**: el porter únic (Jornada/Jornals com a IdP de Comanda) **s'ha d'implantar a les DUES**.
+Un client pot tenir:
+- només **Jornada** (control horari lean) + Comanda → porter via Jornada
+- només **Jornals** (suite RRHH completa, que ja inclou el portal) + Comanda → porter via Jornals
+- els dos (poc probable, però possible en una migració)
+
+**Ideal**: el mateix contracte i la mateixa lògica d'exchange a les dues, amb **el mateix nom de claims**,
+perquè Comanda no hagi de distingir d'on ve el token:
+
+```
+Comanda rep un jornada_token vàlid  →  és igual si l'ha emès Jornada o Jornals
+                                       (mateix iss vàlid, mateixos claims)
+```
+
+**Implementació pràctica** (per no duplicar lògica a Comanda):
+- Comanda accepta el token contra una **llista d'emissores vàlides** (Jornada i Jornals), cadascuna amb la seva clau.
+- O —encara més simple— es crea un petit **mòdul compartit** del porter que les dues versions importin
+  (mateixa funció d'emetre el token, mateixos claims). Així la lògica viu en UN lloc.
+
+---
+
 ## 1. El problema actual (un forat, no una hipòtesi)
 
 De la feina feta els dies 13-14/09 al backend de Comanda (`integrations.py`):
@@ -110,16 +144,20 @@ Automàtic. Tres beneficis el mateix moviment:
 ## 6. Camí d'implementació proposat (per fases, sense sobre-enginyar)
 
 ### FASE 1 — Destapar el forat (mínim, sense tocar arquitectura) · *prioritat alta*
-Objectiu: que els cambrers sincronitzats de Jornada **puguin entrar** ja.
+Objectiu: que els cambrers sincronitzats des de qualsevol de les dues versions de Jornada **puguin entrar** ja.
 
-1. **Jornada**: `POST /api/v1/portal/login` → a més del que ja retorna, retorna un **`comanda_token`** (JWT curt, firmat; claims: `empleado_id`, `nom`, `centre_fitxat`) quan el client demana accés a Comanda.
+1. **Jornada (A) i Jornals (B)**: al seu login del portal (`/api/portal/login` a Jornada;
+   el login del mòdul `portal` a Jornals) → a més del que ja retornen, **retornar un `comanda_token`**
+   (JWT curt, firmat; claims: `empleado_id`, `nom`, `centre_fitxat`) quan el client demana accés a Comanda.
+   **Mateix contracte a les dues** (vegeu §0).
 2. **Comanda**: nou `POST /api/v1/staff/session-exchange { jornada_token }` que:
-   - valida el token contra Jornada (clau compartida o JWKS de Jornada),
+   - valida el token contra l'emissora que correspongui (Jornada **o** Jornals — llista d'emissores vàlides),
    - busca `Staff` per `external_id` + `source='jornada'`,
    - emet la sessió de dispositiu normal (com el login actual).
 3. **Comandera**: si arriba amb `?jornada_token=...`, bescanvia'l i entra directament a `/comandera/sala`.
 
-*Verificació*: un empleat sincronitzat de Jornada entra a la Comandera amb el seu PIN de fitxatge.
+*Verificació*: un empleat sincronitzat **des de Jornada** i un **des de Jornals** entren tots dos a la
+Comandera amb el seu PIN de fitxatge.
 
 ### FASE 2 — El centre automàtic · *el guany gros*
 4. El token porta `centre_fitxat`; la Comandera **obre el torn allà directament** (sense selector).
@@ -135,13 +173,17 @@ Objectiu: que els cambrers sincronitzats de Jornada **puguin entrar** ja.
 
 ## 7. Contracte concret (perquè es pugui picar sense endevinar)
 
-### Jornada emet
+### Jornada emet (i Jornals, idènticament)
 ```
-POST /api/v1/portal/login          (ja existeix — s'amplia)
+POST /api/portal/login             (Jornada — ja existeix, s'amplia)
+POST /<rutes del portal>/login     (Jornals — ja existeix, s'amplia igual)
   body:  { pin: "2345", scope: "comanda" }
   200:   { empleado_id, nombre, comanda_token: "<JWT>" }
 ```
-Claims del JWT: `iss=jornada`, `aud=comanda`, `sub=<empleado_id>`, `name`, `center_external_id`, `exp` (≤15 min).
+Claims del JWT (IGUALS a les dues emissores): `iss` (jornada | jornals), `aud=comanda`,
+`sub=<empleado_id>`, `name`, `center_external_id`, `exp` (≤15 min).
+
+**Nota**: Comanda ha d'acceptar les **dues `iss`** com a emissores vàlides.
 
 ### Comanda bescanvia
 ```
