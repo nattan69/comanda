@@ -264,11 +264,15 @@ export const api = {
   },
 
   // ---------- Sala ----------
-  async getAreas(): Promise<Area[]> {
-    return apiRequest<Area[]>('/tables/areas');
+  /** Àrees de la sala. El pla de sala és PER CENTRE (decisió Tomeu 14/09/2026). */
+  async getAreas(centerId?: string): Promise<Area[]> {
+    const q = centerId ? `?center_id=${encodeURIComponent(centerId)}` : '';
+    return apiRequest<Area[]>(`/tables/areas${q}`);
   },
-  async getTables(): Promise<Table[]> {
-    return apiRequest<Table[]>('/tables');
+  /** Taules del pla de sala. Filtrat PER CENTRE (cada punt de venda el seu pla). */
+  async getTables(centerId?: string): Promise<Table[]> {
+    const q = centerId ? `?center_id=${encodeURIComponent(centerId)}` : '';
+    return apiRequest<Table[]>(`/tables${q}`);
   },
   async setTableStatus(tableId: string, status: string): Promise<Table> {
     return apiRequest<Table>(`/tables/${tableId}`, {
@@ -526,6 +530,17 @@ export const apiShift = {
 };
 
 export const apiEstablishment = {
+  /**
+   * TOTS els establiments/hotels que l'usuari pot triar.
+   *
+   * Avui només n'hi ha un per desplegament. Quan es configuri el ROL D'USUARIS
+   * (decisió Tomeu 14/09/2026), el backend retornarà només els hotels que
+   * l'usuari tingui permesos i aquest selector canviarà entre ells sense tocar
+   * res del front.
+   */
+  async getTots(): Promise<{ id: string; name: string; category?: string | null }[]> {
+    return apiRequest<{ id: string; name: string; category?: string | null }[]>('/establishments');
+  },
   /** L'establiment actiu (nom, categoria... per a la capçalera). */
   async getActiu(): Promise<{ id: string; name: string; legal_name?: string; category?: string;
                               nif?: string; city?: string }> {

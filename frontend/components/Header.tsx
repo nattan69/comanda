@@ -21,6 +21,11 @@ export default function Header() {
   const [centre, setCentre] = useState<string>('');
   // Nom de la PROPIETAT/Hotel (decisió Tomeu 14/09/2026): ex. «Hotel Sa Ràpita ****»
   const [hotel, setHotel] = useState<string>('');
+  //: Els establiments/hotels que l'usuari pot triar (ara un; amb el ROL
+  //: D'USUARIS configurat, tants com tingui permesos — Tomeu 14/09/2026).
+  const [establiments, setEstabliments] = useState<
+    { id: string; name: string; category?: string | null }[]>([]);
+  const [idEstabliment, setIdEstabliment] = useState<string>('');
   //: Torn del cambrer al centre triat (el panell de cambrers compta els torns
   //: OBERTS — si no se n'obre cap, el panell surt buit). Catch 14/09/2026.
   const [torn, setTorn] = useState<{ id: string; center_name?: string | null } | null>(null);
@@ -34,12 +39,27 @@ export default function Header() {
     return () => clearInterval(t);
   }, []);
 
-  // nom de l'establiment (la propietat)
+  // establiments (la propietat) — un sol de moment; amb rols, els permesos
   useEffect(() => {
-    apiEstablishment.getActiu()
-      .then((e) => setHotel([e.name, e.category].filter(Boolean).join(' ')))
+    apiEstablishment.getTots()
+      .then((es) => {
+        setEstabliments(es);
+        const desat = typeof window !== 'undefined' ? localStorage.getItem('comanda-establiment') : null;
+        const actiu = es.find((x) => x.id === desat)?.id || es[0]?.id || '';
+        setIdEstabliment(actiu);
+        const e = es.find((x) => x.id === actiu);
+        if (e) setHotel([e.name, e.category].filter(Boolean).join(' '));
+      })
       .catch(() => {});
   }, []);
+
+  const triaEstabliment = (id: string) => {
+    setIdEstabliment(id);
+    try { localStorage.setItem('comanda-establiment', id); } catch { /* privat */ }
+    const e = establiments.find((x) => x.id === id);
+    if (e) setHotel([e.name, e.category].filter(Boolean).join(' '));
+    try { window.dispatchEvent(new Event('comanda:establiment')); } catch { /* SSR */ }
+  };
 
   // centres + el que ja tenia triat
   useEffect(() => {
@@ -77,6 +97,8 @@ export default function Header() {
   const triaCentre = (id: string) => {
     setCentre(id);
     try { localStorage.setItem('comanda-centre', id); } catch { /* privat */ }
+    // avisa la resta de l'app (el pla de sala recarrega el pla d'aquest centre)
+    try { window.dispatchEvent(new Event('comanda:centre')); } catch { /* SSR */ }
     void obreTorn(id);
   };
 
@@ -94,14 +116,32 @@ export default function Header() {
     <header className="flex items-center gap-3 flex-wrap px-5 py-3"
       style={{ background: '#141429', borderBottom: '1px solid rgba(226,176,74,.2)' }}>
 
-      {/* PROPIETAT / HOTEL */}
-      {hotel && (
-        <div className="flex items-center gap-2 pr-3 mr-1"
-          style={{ borderRight: '1px solid rgba(226,176,74,.2)' }}>
-          <span className="text-base font-bold" style={{ color: '#e2b04a' }}>🏨</span>
+      {/* PROPIETAT / HOTEL — SELECT (decisió Tomeu 14/09/2026).
+          Quan hi hagi el ROL D'USUARIS configurat, aquest selector permetrà
+          triar entre els hotels que l'usuari tingui permesos. De moment només
+          n'hi ha un (el de l'establiment actiu), però l'element ja és un select
+          perquè no calgui canviar-lo després. */}
+      <div className="flex items-center gap-2 pr-3 mr-1"
+        style={{ borderRight: '1px solid rgba(226,176,74,.2)' }}>
+        <span className="text-base font-bold" style={{ color: '#e2b04a' }}>🏨</span>
+        {establiments.length > 0 ? (
+          <select
+            value={idEstabliment}
+            onChange={(e) => triaEstabliment(e.target.value)}
+            className="rounded-xl px-3 py-2 text-sm font-bold outline-none"
+            style={{ background: 'rgba(226,176,74,.12)', color: '#e2b04a',
+                     border: '1px solid rgba(226,176,74,.3)' }}
+            aria-label="Hotel / propietat">
+            {establiments.map((e) => (
+              <option key={e.id} value={e.id} style={{ background: '#1a1a2e', color: '#e5e9f0' }}>
+                {[e.name, e.category].filter(Boolean).join(' ')}
+              </option>
+            ))}
+          </select>
+        ) : (
           <span className="text-sm font-bold" style={{ color: '#e5e9f0' }}>{hotel}</span>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* PUNT DE VENDA */}
       <div className="flex items-center gap-2">

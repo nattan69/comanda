@@ -2,7 +2,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from ...db import get_db
@@ -16,8 +16,16 @@ router = APIRouter()
 # ÁREAS
 # ============================================================
 @router.get("/areas", response_model=List[AreaOut])
-def list_areas(db: Session = Depends(get_db)):
-    return db.query(Area).order_by(Area.name).all()
+def list_areas(center_id: Optional[UUID] = None, db: Session = Depends(get_db)):
+    """Àrees de la sala. Si s'indica `center_id`, només les d'aqueix centre.
+
+    La DISPOSICIÓ del pla de sala és PER CENTRE/DEPARTAMENT (decisió Tomeu
+    14/09/2026): cada punt de venda té les seves àrees i les seves taules.
+    """
+    q = db.query(Area)
+    if center_id:
+        q = q.filter(Area.center_id == center_id)
+    return q.order_by(Area.name).all()
 
 
 @router.post("/areas", response_model=AreaOut, status_code=status.HTTP_201_CREATED)
@@ -79,9 +87,20 @@ def _amb_saldo(db: Session, taules: list) -> list:
 
 
 @router.get("", response_model=List[TableOut])
-def list_tables(db: Session = Depends(get_db)):
-    """Pla de sala: taules amb posició, forma, estat i SALDO PENDENT de cobrar."""
-    taules = db.query(Table).order_by(Table.number).all()
+def list_tables(center_id: Optional[UUID] = None, area_id: Optional[UUID] = None,
+                db: Session = Depends(get_db)):
+    """Pla de sala: taules amb posició, forma, estat i SALDO PENDENT de cobrar.
+
+    ⚠️ Es filtra PER CENTRE (decisió Tomeu 14/09/2026): cada punt de venda té
+    la seva pròpia distribució de taules. Sense el filtre, tots els centres
+    veien les mateixes taules i canviar de centre donava error (530).
+    """
+    q = db.query(Table)
+    if center_id:
+        q = q.filter(Table.center_id == center_id)
+    if area_id:
+        q = q.filter(Table.area_id == area_id)
+    taules = q.order_by(Table.number).all()
     return _amb_saldo(db, taules)
 
 

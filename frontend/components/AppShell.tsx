@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ClipboardList, Languages, Calculator } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Calculator } from 'lucide-react';
 import LogoutLink from '@/components/LogoutLink';
 import Header from '@/components/Header';
 import { IdiomaProvider } from '@/lib/idioma';
@@ -59,10 +59,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <LayoutDashboard size={20} className="text-brand-gold group-hover:scale-110 transition-transform" />
             <span>Comandera (cambrers)</span>
           </Link>
-          <div className="flex items-center gap-2 text-xs text-gray-400 px-3 py-2 bg-brand-dark rounded-md">
-            <Languages size={14} />
-            <span>ca | es | en</span>
-          </div>
+          {/* (el selector d'idioma viu al HEADER i és global — aquí era un residu decoratiu) */}
           <LogoutLink />
         </div>
       </nav>

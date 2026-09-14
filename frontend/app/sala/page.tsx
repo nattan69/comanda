@@ -27,17 +27,42 @@ export default function SalaPage() {
   const [cobrant, setCobrant] = useState<{ id: string; total: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [carregant, setCarregant] = useState(true);
+  //: Centre actiu (el del selector «Tria el punt de venda» del header).
+  //: La distribució del pla de sala és PER CENTRE (decisió Tomeu 14/09/2026):
+  //: en canviar de centre, es recarrega el pla d'aquell punt de venda.
+  const [centreActiu, setCentreActiu] = useState<string>('');
+
+  // El header escriu el centre triat a localStorage i emet un esdeveniment.
+  useEffect(() => {
+    const llegeix = () => {
+      const c = typeof window !== 'undefined' ? localStorage.getItem('comanda-centre') : null;
+      setCentreActiu(c || '');
+    };
+    llegeix();
+    const onCanvi = () => llegeix();
+    window.addEventListener('comanda:centre', onCanvi);
+    window.addEventListener('storage', onCanvi);
+    return () => {
+      window.removeEventListener('comanda:centre', onCanvi);
+      window.removeEventListener('storage', onCanvi);
+    };
+  }, []);
 
   const refresca = useCallback(async () => {
     try {
-      const [t, a] = await Promise.all([api.getTables(), api.getAreas()]);
+      // només el pla del CENTRE actiu
+      const [t, a] = await Promise.all([
+        api.getTables(centreActiu || undefined),
+        api.getAreas(centreActiu || undefined),
+      ]);
       setTaules(t);
       setArees(a);
-      if (!areaActiva && a.length) setAreaActiva(a[0].id);
+      // si l'àrea activa no és d'aquest centre, triam la primera del centre
+      setAreaActiva((act) => (a.some((x) => x.id === act) ? act : (a[0]?.id ?? '')));
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error carregant el pla de sala');
     } finally { setCarregant(false); }
-  }, [areaActiva]);
+  }, [centreActiu]);
 
   useEffect(() => { void refresca(); }, [refresca]);
 
