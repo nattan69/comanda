@@ -8,6 +8,7 @@ personal → logout (tancar torn). Cada torn és d'UN cambrer dins UN departamen
 from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from ..models.models import Order, Payment, Shift, Void
 
@@ -62,17 +63,20 @@ def _shift_summary(db: Session, shift: Shift) -> dict:
 
 
 def open_shift(db: Session, staff_id, center_id) -> Shift:
-    """Login: obre un torn per al cambrer dins el centre."""
-    existing = (
-        db.query(Shift)
-        .filter(Shift.staff_id == staff_id, Shift.status == "open")
-        .first()
-    )
-    if existing:
-        raise ValueError("El cambrer ja té un torn obert (ha de fer logout abans).")
+    """Login: obre un torn per al cambrer dins el centre.
+
+    La invariància «un sol torn obert per cambrer» la garanteix un índex únic
+    parcial a la BD (`uq_shifts_open_per_staff`), no el codi. Si hi ha
+    concurrència (doble clic, PDA + mòbil, reintents), el segon INSERT topa amb
+    la constraint i es retorna l'error net en lloc de duplicar el torn.
+    """
     shift = Shift(staff_id=staff_id, center_id=center_id, status="open")
     db.add(shift)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("El cambrer ja té un torn obert (ha de fer logout abans).")
     db.refresh(shift)
     return shift
 

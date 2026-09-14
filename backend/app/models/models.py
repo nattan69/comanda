@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Numeric, Integer, Date, Text, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Numeric, Integer, Date, Text, JSON, Index, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -396,6 +396,18 @@ class Shift(Base):
     card_total = Column(Numeric(10, 2))  # total de targetes del torn (calculat pel sistema)
     liquidation = Column(JSON)  # resum del torn (vendes, pagaments, invitacions, anul·lacions, desquadre)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Invariant de BD: UN SOL torn obert per cambrer (evita la cursa del
+    # check-then-insert que duplicava torns amb concurrència).
+    __table_args__ = (
+        Index(
+            "uq_shifts_open_per_staff",
+            "staff_id",
+            unique=True,
+            sqlite_where=text("status = 'open'"),
+            postgresql_where=text("status = 'open'"),
+        ),
+    )
 
 
 # ============================================================
