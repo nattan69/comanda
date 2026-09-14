@@ -103,8 +103,10 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         notes=payload.notes,
         comanda_number=ronda,
     )
-    # Tiquet de comanda (seqüència única TICKET, compartida per tots els tipus).
-    _, order.ticket_code = next_ticket_number(db, "TICKET")
+    # ⚠️ EL NÚMERO DE TIQUET NO ES GENERA AQUÍ (decisió Tomeu 14/09/2026):
+    # el tiquet neix EN COBRAR (en triar el tipus de cobrament i donar-li a
+    # cobrar). Mentre la comanda és oberta no té tiquet — i el tiquet de CUINA
+    # no n'ha de portar. `ticket_code` queda NULL fins que es paga.
     db.add(order)
     db.flush()  # para obtener order.id
 
@@ -416,6 +418,11 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
     seq = "INV" if method == "house" else "TICKET"
     _, ticket_code = next_ticket_number(db, seq)
 
+    # El tiquet s'assigna ARA: a la comanda (és el seu número oficial) i al
+    # pagament. Si la comanda ja en tenia (pagaments parcials), es conserva.
+    if not order.ticket_code:
+        order.ticket_code = ticket_code
+
     payment = Payment(
         order_id=order_id,
         method=method,
@@ -603,7 +610,7 @@ def moure_linies(order_id: UUID, payload: MouLiniesPayload, db: Session = Depend
             #: mateixa ronda que l'origen: és una divisió del MATEIX compte
             comanda_number=int(getattr(origen, "comanda_number", 1) or 1),
         )
-        _, desti.ticket_code = next_ticket_number(db, "TICKET")
+        # sense tiquet: la divisió neix sense número; s'assignarà en cobrar
         db.add(desti)
         db.flush()
 
@@ -653,7 +660,7 @@ def build_kitchen_ticket(db: Session, order_id, line_ids: Optional[list] = None)
     return {
         "type": "cuina",
         "order_id": str(order.id),
-        "ticket_code": order.ticket_code or "",
+        # sense ticket_code: encara no existeix (es genera en cobrar)
         "comanda_number": int(getattr(order, "comanda_number", 1) or 1),
         "table_number": taula.number if taula else None,
         "center_name": centre.name if centre else None,
@@ -681,8 +688,8 @@ def render_kitchen_ticket_text(t: dict) -> str:
     if t.get("table_number") is not None:
         out.append(f"TAULA: {t['table_number']}")
     out.append(f"Comanda nº: {t.get('comanda_number', 1)}")
-    if t.get("ticket_code"):
-        out.append(f"Tiquet: {t['ticket_code']}")
+    # ⚠️ SENSE número de tiquet: el tiquet es genera en cobrar, i a la cuina
+    # no li cal (decisió Tomeu 14/09/2026). Només taula + ronda.
     if t.get("staff_name"):
         out.append(f"Cambrer: {t['staff_name']}")
     try:
@@ -758,7 +765,7 @@ def enviar_cuina(order_id: UUID, payload: EnviarCuinaPayload, db: Session = Depe
     # Avisa el KDS en viu (amb els plats)
     emit_sync("order.sent_to_kitchen", {
         "order_id": str(order.id),
-        "ticket_code": order.ticket_code,
+        # sense ticket_code: encara no existeix (es genera en cobrar)
         "table_number": ticket.get("table_number"),
         "center_id": str(order.center_id) if order.center_id else None,
         "comanda_number": ticket.get("comanda_number"),
