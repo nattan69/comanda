@@ -129,7 +129,7 @@ def _post(url: str, key: str, payload: dict) -> dict:
             f"{url}/api/v1/intake/comanda",
             headers={"X-API-Key": key},
             json=payload,
-            timeout=15,
+            timeout=3,
         )
         data = r.json()
         logger.info(f"[COMPTA] intake {payload['external_id']}: {r.status_code} {data}")

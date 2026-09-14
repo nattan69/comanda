@@ -8,7 +8,7 @@ Router del tancament del dia del TPV.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
@@ -21,20 +21,23 @@ router = APIRouter()
 
 
 @router.post("/x")
-def preview_closure(payload: DayClosureRunRequest, db: Session = Depends(get_db)):
+def preview_closure(payload: Optional[DayClosureRunRequest] = None, db: Session = Depends(get_db)):
     """Informe X (pre-tancament): lectura del dia, sense tancar res.
 
     Es pot emetre tantes vegades com calgui. NO tanca comandes ni crea cap
-    tancament definitiu.
+    tancament definitiu. El body és opcional (per defecte: avui).
     """
-    closure_date = payload.closure_date or date.today()
+    closure_date = (payload.closure_date if payload else None) or date.today()
     return preview_day_closure(db, closure_date)
 
 
 @router.post("/run", response_model=DayClosureOut)
-def run_closure(payload: DayClosureRunRequest, db: Session = Depends(get_db)):
-    """Executa (idempotent) el tancament del dia (la Z) i el retorna."""
-    closure_date = payload.closure_date or date.today()
+def run_closure(payload: Optional[DayClosureRunRequest] = None, db: Session = Depends(get_db)):
+    """Executa (idempotent) el tancament del dia (la Z) i el retorna.
+
+    El body és opcional (per defecte: avui).
+    """
+    closure_date = (payload.closure_date if payload else None) or date.today()
     return run_day_closure(db, closure_date)
 
 
