@@ -125,7 +125,7 @@ export default function ComanderaTaula() {
       // Tiquet de SERVEI (opcional, segons el check): sense dades fiscals,
       // per portar a la taula amb el desglossament i el saldo anterior.
       let text = eraNova ? 'Comanda enviada' : 'Afegit a la comanda';
-      if (imprimir && ordreId) {
+      if (ordreId) {
         try {
           const { imprimeixTiquetServei } = await import('@/lib/printer');
           await imprimeixTiquetServei(ordreId);
@@ -244,7 +244,7 @@ export default function ComanderaTaula() {
             </span>
             {!taulesObertes && comanda && (
               <span className="ml-auto text-xs font-bold" style={{ color: '#fca5a5' }}>
-                pendent {parseFloat(String(comanda.total_amount || 0)).toFixed(2)}€
+                pendent {parseFloat(String(comanda.total || 0)).toFixed(2)}€
               </span>
             )}
           </label>

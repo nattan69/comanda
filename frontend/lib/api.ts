@@ -15,6 +15,7 @@ export type Area = {
   position_x: number;
   position_y: number;
   surcharge_percent?: number | string;
+  center_id?: string;
 };
 
 /** Taula del pla de sala: posició REAL, forma, estat i saldo pendent. */

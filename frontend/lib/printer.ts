@@ -98,6 +98,5 @@ export async function imprimeixTiquetServei(
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) throw new Error(`Error ${res.status} generant el tiquet de servei`);
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  return printEscpos(bytes);
+  return printEscpos(await res.arrayBuffer());
 }
