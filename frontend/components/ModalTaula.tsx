@@ -41,7 +41,7 @@ export default function ModalTaula({
     } finally { setOcupat(false); }
   };
 
-  const anul·la = async (lineId: string) => {
+  const anulla = async (lineId: string) => {
     setOcupat(true); setMsg(null);
     try {
       await apiTable.voidLine(comanda.order_id!, lineId);
@@ -118,7 +118,7 @@ export default function ModalTaula({
                           disabled={l.status === 'cancelled'}
                           className="px-2 py-1 rounded-lg text-xs"
                           style={{ background: 'rgba(255,255,255,.08)', color: '#e5e9f0' }}>✎</button>
-                        <button onClick={() => anul·la(l.id)} disabled={l.status === 'cancelled' || ocupat}
+                        <button onClick={() => anulla(l.id)} disabled={l.status === 'cancelled' || ocupat}
                           className="px-2 py-1 rounded-lg text-xs disabled:opacity-30"
                           style={{ background: 'rgba(239,68,68,.18)', color: '#fca5a5' }}>🗑</button>
                       </div>
