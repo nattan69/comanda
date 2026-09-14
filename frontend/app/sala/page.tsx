@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api, apiTable, Table, Area, TableComanda } from '@/lib/api';
 import { useComandaWs, WsBadge } from '@/lib/useComandaWs';
 import PlaSala from '@/components/PlaSala';
+import PanellCambrers from '@/components/PanellCambrers';
 import ModalTaula from '@/components/ModalTaula';
 import ModalCobrar from '@/components/ModalCobrar';
 
@@ -66,6 +67,9 @@ export default function SalaPage() {
         <h1 className="text-3xl font-bold text-brand-gold">Sala</h1>
         <WsBadge status={wsStatus} />
       </div>
+
+      {/* FRAME DE CAMBRERS DE SERVEI (decisió Tomeu 14/09/2026) */}
+      <PanellCambrers centerId={areaActiva ? arees.find(a=>a.id===areaActiva)?.center_id : undefined} />
 
       {msg && (
         <div className="mb-4 px-4 py-2 rounded-lg text-sm"

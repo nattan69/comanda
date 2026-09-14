@@ -53,6 +53,9 @@ class Area(Base):
     __tablename__ = 'areas'
     id = uuid_pk()
     name = Column(String, nullable=False)  # terraza, interior, barra...
+    #: Centre/departament al qual pertany aquesta àrea (decisió Tomeu 14/09/2026).
+    #: La DISPOSICIÓ de taules és per centre: cada punt de venda té el seu pla.
+    center_id = Column(UUID(as_uuid=True), ForeignKey('centers.id', ondelete='SET NULL'))
     position_x = Column(Integer, default=0)
     position_y = Column(Integer, default=0)
     surcharge_percent = Column(Numeric(5, 2), default=0)  # recargo de terraza, etc.
@@ -63,6 +66,8 @@ class Table(Base):
     __tablename__ = 'tables'
     id = uuid_pk()
     area_id = Column(UUID(as_uuid=True), ForeignKey('areas.id', ondelete='SET NULL'))
+    #: Centre/departament on viu aquesta taula (per al pla de sala per centre).
+    center_id = Column(UUID(as_uuid=True), ForeignKey('centers.id', ondelete='SET NULL'))
     number = Column(String, nullable=False)  # "1", "2", "T1"...
     seats = Column(Integer, default=4)
     position_x = Column(Integer, default=0)
@@ -180,6 +185,10 @@ class Order(Base):
     center_id = Column(UUID(as_uuid=True), ForeignKey('centers.id', ondelete='SET NULL'))
     order_type = Column(String, default='dine_in')  # dine_in, takeaway, delivery
     status = Column(String, default='open')  # open, sent_to_kitchen, served, paid, cancelled
+    #: Número de comanda (RONDA) del compte de la taula. La primera és l'1; si es
+    #: fa una altra comanda sense haver pagat, s'incrementa (2, 3...) i el tiquet
+    #: de servei mostra el SALDO ANTERIOR + la comanda actual (decisió Tomeu 14/09/2026).
+    comanda_number = Column(Integer, default=1, nullable=False)
     total_amount = Column(Numeric(10, 2), default=0)
     discount_amount = Column(Numeric(10, 2), default=0)
     notes = Column(Text)
@@ -206,6 +215,8 @@ class OrderItem(Base):
     price_snapshot = Column(Numeric(10, 2))  # precio en el momento del pedido
     quantity = Column(Integer, default=1, nullable=False)
     vat_rate = Column(Numeric(5, 2), default=10.0)
+    #: Ronda del compte de la taula a què pertany aquesta línia (1 = primera comanda).
+    comanda_number = Column(Integer, default=1, nullable=False)
     status = Column(String, default='pending')  # pending, sent, preparing, ready, served, cancelled
     modifications = Column(JSON)  # ["sin cebolla", "poco hecho", ...]
     seat_number = Column(Integer)  # para división de cuenta por comensal
@@ -373,6 +384,11 @@ class Center(Base):
     external_id = Column(String, index=True)  # center_id a Jornada
     source = Column(String, default='manual')  # manual, jornada
     active = Column(Boolean, default=True, nullable=False)
+    #: TAULES OBERTES (decisió Tomeu 14/09/2026): si és True, aquest centre
+    #: permet comptes de taula amb RONDES ACUMULATIVES (es paga al final).
+    #: Si és False, NO es permeten taules obertes: cada consumició s'ha de
+    #: pagar i no s'acumula res al compte de la taula.
+    allows_open_tables = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

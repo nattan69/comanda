@@ -56,6 +56,8 @@ class LoginResponse(BaseModel):
 # ============================================================
 class AreaBase(BaseModel):
     name: str
+    #: Centre/departament al qual pertany l'àrea (disposició per centre)
+    center_id: Optional[UUID] = None
     position_x: int = 0
     position_y: int = 0
     surcharge_percent: float = 0
@@ -72,6 +74,8 @@ class AreaOut(AreaBase):
 
 class TableBase(BaseModel):
     area_id: Optional[UUID] = None
+    #: Centre/departament on viu la taula (pla de sala PER CENTRE, decisió Tomeu 14/09/2026)
+    center_id: Optional[UUID] = None
     number: str
     seats: int = 4
     position_x: int = 0
@@ -255,6 +259,9 @@ class OrderOut(BaseModel):
     notes: Optional[str] = None
     room_number: Optional[str] = None
     ticket_code: Optional[str] = None
+    #: Número de comanda (ronda) del compte de la taula (decisió Tomeu 14/09/2026):
+    #: la 1a és 1; si es demana més sense pagar, s'incrementa (2, 3...).
+    comanda_number: int = 1
     opened_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
     items: List[OrderItemOut] = []

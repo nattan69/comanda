@@ -82,3 +82,22 @@ export async function imprimeixTicket(
   const bytes = await (await import('@/lib/api')).api.getTicketEscpos(orderId, opts);
   return printEscpos(bytes);
 }
+/**
+ * Imprimeix el TIQUET DE SERVEI d'una comanda (sense dades fiscals).
+ * És el paper que el cambrer duu a la taula: departament, nº de comanda,
+ * saldo anterior, desglossament i import. (Decisió Tomeu 14/09/2026.)
+ */
+export async function imprimeixTiquetServei(
+  orderId: string,
+  inclouAnterior = true,
+): Promise<'gateway' | 'webusb'> {
+  const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const token = typeof window !== 'undefined' ? localStorage.getItem('comanda-token') || '' : '';
+  const res = await fetch(
+    `${API}/orders/${orderId}/tiquet-servei?format=escpos&inclou_anterior=${inclouAnterior}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Error ${res.status} generant el tiquet de servei`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  return printEscpos(bytes);
+}

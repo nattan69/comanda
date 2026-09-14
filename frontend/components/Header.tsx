@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiCarta, Center, getStoredStaff } from '@/lib/api';
+import { apiCarta, apiEstablishment, Center } from '@/lib/api';
 import { useIdioma } from '@/lib/idioma';
 import { Lang } from '@/lib/i18n';
 
@@ -19,6 +19,8 @@ export default function Header() {
   const { lang, setLang } = useIdioma();
   const [centres, setCentres] = useState<Center[]>([]);
   const [centre, setCentre] = useState<string>('');
+  // Nom de la PROPIETAT/Hotel (decisió Tomeu 14/09/2026): ex. «Hotel Sa Ràpita ****»
+  const [hotel, setHotel] = useState<string>('');
   const [ara, setAra] = useState<Date | null>(null);
 
   // rellotge en viu (1 s). Null al primer render per evitar desajust d'hidratació.
@@ -26,6 +28,13 @@ export default function Header() {
     setAra(new Date());
     const t = setInterval(() => setAra(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  // nom de l'establiment (la propietat)
+  useEffect(() => {
+    apiEstablishment.getActiu()
+      .then((e) => setHotel([e.name, e.category].filter(Boolean).join(' ')))
+      .catch(() => {});
   }, []);
 
   // centres + el que ja tenia triat
@@ -55,6 +64,15 @@ export default function Header() {
   return (
     <header className="flex items-center gap-3 flex-wrap px-5 py-3"
       style={{ background: '#141429', borderBottom: '1px solid rgba(226,176,74,.2)' }}>
+
+      {/* PROPIETAT / HOTEL */}
+      {hotel && (
+        <div className="flex items-center gap-2 pr-3 mr-1"
+          style={{ borderRight: '1px solid rgba(226,176,74,.2)' }}>
+          <span className="text-base font-bold" style={{ color: '#e2b04a' }}>🏨</span>
+          <span className="text-sm font-bold" style={{ color: '#e5e9f0' }}>{hotel}</span>
+        </div>
+      )}
 
       {/* PUNT DE VENDA */}
       <div className="flex items-center gap-2">

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 from ...db import get_db
-from ...models.models import Order, OrderItem, MenuItem, Void, Payment, RoomCredit
+from ...models.models import Order, OrderItem, MenuItem, Void, Payment, RoomCredit, Center
 from ...schemas.schemas import (
     OrderCreate,
     OrderOut,
@@ -21,6 +21,11 @@ from ...schemas.schemas import (
     PaymentOut,
 )
 from ...services.ticket_service import next_ticket_number
+from ...services.receipt_service import (
+    build_service_slip,
+    render_service_slip_text,
+    render_service_slip_escpos,
+)
 from ...services.receipt_service import (
     build_receipt,
     build_payment_receipt,
@@ -59,6 +64,36 @@ def list_orders(db: Session = Depends(get_db)):
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
+    # === COMANDA SUCCESSIVA (decisió Tomeu 14/09/2026) ===
+    # Si la taula ja té un compte obert (una comanda sense pagar), aquesta nova
+    # comanda és una RONDA MÉS: el número s'incrementa (2, 3...) i el seu import
+    # se suma al saldo anterior del compte. El tiquet de servei ho mostrarà.
+    ronda = 1
+    if payload.table_id:
+        darrera = (
+            db.query(Order)
+            .filter(
+                Order.table_id == payload.table_id,
+                Order.status.notin_(["paid", "cancelled", "closed"]),
+            )
+            .order_by(Order.comanda_number.desc())
+            .first()
+        )
+        if darrera:
+            # === POLÍTICA DE TAULES OBERTES (decisió Tomeu 14/09/2026) ===
+            # Si el centre NO permet taules obertes, no es pot acumular una
+            # ronda nova sobre un compte sense pagar: cal cobrar la primera.
+            centre = db.get(Center, payload.center_id or darrera.center_id) if (payload.center_id or darrera.center_id) else None
+            if centre is not None and not bool(getattr(centre, "allows_open_tables", True)):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Aquest punt de venda no permet taules obertes: "
+                        "cal cobrar les consumicions de la taula abans de fer-ne més."
+                    ),
+                )
+            ronda = int(getattr(darrera, "comanda_number", 1) or 1) + 1
+
     order = Order(
         table_id=payload.table_id,
         staff_id=payload.staff_id,
@@ -66,6 +101,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
         center_id=payload.center_id,
         order_type=payload.order_type,
         notes=payload.notes,
+        comanda_number=ronda,
     )
     # Tiquet de comanda (seqüència única TICKET, compartida per tots els tipus).
     _, order.ticket_code = next_ticket_number(db, "TICKET")
@@ -93,6 +129,7 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
             vat_rate=vat_rate,
             modifications=item_data.modifications,
             seat_number=item_data.seat_number,
+            comanda_number=ronda,
         )
         db.add(item)
 
@@ -438,3 +475,98 @@ def void_item(order_id: UUID, item_id: UUID, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(item)
     return item
+
+
+# ============================================================
+# TIQUET DE SERVEI (per portar a taula) — decisió Tomeu 14/09/2026
+# ============================================================
+
+@router.get("/{order_id}/tiquet-servei")
+def tiquet_servei(order_id: UUID, format: str = "text", inclou_anterior: bool = True,
+                  db: Session = Depends(get_db)):
+    """Tiquet de SERVEI: sense dades fiscals, per portar a la taula.
+
+    Conté: departament · nº de comanda (ronda) · saldo anterior · desglossament
+    de la comanda actual · cambrer · import de la comanda.
+    `format=escpos` retorna els bytes per a la impressora tèrmica.
+    """
+    try:
+        slip = build_service_slip(db, order_id, inclou_anterior=inclou_anterior)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if format == "escpos":
+        return Response(content=render_service_slip_escpos(slip), media_type="application/octet-stream")
+    return PlainTextResponse(render_service_slip_text(slip))
+
+
+# ============================================================
+# DIVIDIR LA COMANDA (moure línies a una altra comanda) — decisió Tomeu 14/09/2026
+# ============================================================
+
+class MouLiniesPayload(BaseModel):
+    """Mou línies seleccionades d'una comanda a una ALTRA (per tiquets separats)."""
+    line_ids: List[UUID] = Field(..., min_length=1, description="Línies a moure")
+    #: Comanda de destí. Si no s'indica, se'n crea una de nova per a la taula.
+    desti_order_id: Optional[UUID] = Field(None, description="Comanda de destí (opcional)")
+    #: Si es crea una comanda nova, se li pot canviar el nom/etiqueta de taula.
+    nota: Optional[str] = None
+
+
+@router.post("/{order_id}/moure-linies", response_model=OrderOut)
+def moure_linies(order_id: UUID, payload: MouLiniesPayload, db: Session = Depends(get_db)):
+    """Mou línies d'una comanda a una altra per fer TIQUETS SEPARATS.
+
+    Cas d'ús (Tomeu 14/09/2026): en pagar, poder separar les consumicions en
+    tiquets diferents — per exemple una part per a una persona i una altra per
+    a una altra, i cobrar-les per separat.
+
+    Si no s'indica `desti_order_id`, es crea una comanda NOVA a la mateixa taula
+    (marcada com a divisió) i s'hi mouen les línies. Les dues comandes quadren:
+    el total de les línies és el mateix, només canvien de capçalera.
+    """
+    origen = db.get(Order, order_id)
+    if not origen:
+        raise HTTPException(status_code=404, detail="Comanda origen no trobada")
+    if origen.status in ("paid", "cancelled", "closed"):
+        raise HTTPException(status_code=409, detail="La comanda origen ja està tancada")
+
+    linies = (
+        db.query(OrderItem)
+        .filter(OrderItem.id.in_(payload.line_ids), OrderItem.order_id == order_id)
+        .all()
+    )
+    if not linies:
+        raise HTTPException(status_code=404, detail="Cap de les línies indicades és a la comanda origen")
+
+    # destinació: la indicada o una de nova (divisió del compte)
+    if payload.desti_order_id:
+        desti = db.get(Order, payload.desti_order_id)
+        if not desti:
+            raise HTTPException(status_code=404, detail="Comanda destí no trobada")
+        if desti.status in ("paid", "cancelled", "closed"):
+            raise HTTPException(status_code=409, detail="La comanda destí ja està tancada")
+    else:
+        desti = Order(
+            table_id=origen.table_id,
+            staff_id=origen.staff_id,
+            shift_id=origen.shift_id,
+            center_id=origen.center_id,
+            order_type=origen.order_type,
+            notes=payload.nota or f"Divisió de {origen.ticket_code or 'comanda'}",
+            #: mateixa ronda que l'origen: és una divisió del MATEIX compte
+            comanda_number=int(getattr(origen, "comanda_number", 1) or 1),
+        )
+        _, desti.ticket_code = next_ticket_number(db, "TICKET")
+        db.add(desti)
+        db.flush()
+
+    for l in linies:
+        l.order_id = desti.id
+
+    db.flush()
+    _recalc_total(origen, db)
+    _recalc_total(desti, db)
+    db.commit()
+    db.refresh(desti)
+    return desti

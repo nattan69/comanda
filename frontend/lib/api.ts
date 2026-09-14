@@ -343,9 +343,15 @@ export const api = {
 // ---------- Carta: famílies, categories d'ingrés, centres ----------
 export type IncomeCategory = { id: string; name: string; account_code?: string; sort_order?: number; is_active?: boolean };
 export type Family = { id: string; name: string; sort_order?: number; is_active?: boolean };
-export type Center = { id: string; name: string; external_id?: string | null; source?: string | null };
+export type Center = { id: string; name: string; external_id?: string | null; source?: string | null;
+  /** Si el punt de venda permet taules obertes amb rondes acumulatives. */
+  allows_open_tables?: boolean };
 
 export const apiCarta = {
+  /** Un centre concret (per saber si permet taules obertes). */
+  async getCenter(id: string): Promise<Center & { allows_open_tables?: boolean }> {
+    return apiRequest<Center & { allows_open_tables?: boolean }>(`/centers/${id}`);
+  },
   // articles amb els 3 nivells nous
   async getItems(): Promise<MenuItem[]> {
     return apiRequest<MenuItem[]>('/menu/items');
@@ -442,5 +448,54 @@ export const apiTable = {
   async createArea(dades: { name: string; position_x?: number; position_y?: number;
                             surcharge_percent?: number }): Promise<Area> {
     return apiRequest<Area>('/tables/areas', { method: 'POST', body: JSON.stringify(dades) });
+  },
+};
+
+
+/** Cambrer logueat amb el saldo pendent de les seves taules (frame de dalt). */
+export type CambrerPanell = {
+  shift_id: string;
+  staff_id: string;
+  staff_name: string;
+  center_id?: string | null;
+  center_name?: string | null;
+  opened_at?: string | null;
+  taules_obertes: number;
+  comandes_obertes: number;
+  saldo_pendent: number;
+};
+
+export const apiShift = {
+  /** Panell de cambrers de servei (opcionalment filtrat per centre). */
+  async panell(centerId?: string): Promise<CambrerPanell[]> {
+    const q = centerId ? `?center_id=${encodeURIComponent(centerId)}` : '';
+    return apiRequest<CambrerPanell[]>(`/shifts/panell${q}`);
+  },
+};
+
+export const apiEstablishment = {
+  /** L'establiment actiu (nom, categoria... per a la capçalera). */
+  async getActiu(): Promise<{ id: string; name: string; legal_name?: string; category?: string;
+                              nif?: string; city?: string }> {
+    const llista = await apiRequest<{ id: string; name: string; legal_name?: string;
+      category?: string; nif?: string; city?: string }[]>('/establishments');
+    return llista[0] || { id: '', name: '' };
+  },
+};
+
+export const apiOrdersExt = {
+  /** Tiquet de SERVEI (sense dades fiscals) per portar a taula. */
+  async tiquetServei(orderId: string, inclouAnterior = true): Promise<string> {
+    const q = `?inclou_anterior=${inclouAnterior}`;
+    const res = await fetch(`${API_BASE_URL}/orders/${orderId}/tiquet-servei${q}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error(`Error ${res.status} generant el tiquet de servei`);
+    return res.text();
+  },
+  /** Mou línies d'una comanda a una altra (tiquets separats). */
+  async moureLinies(orderId: string, lineIds: string[], destiOrderId?: string) {
+    return apiRequest(`/orders/${orderId}/moure-linies`, {
+      method: 'POST',
+      body: JSON.stringify({ line_ids: lineIds, desti_order_id: destiOrderId || null }),
+    });
   },
 };

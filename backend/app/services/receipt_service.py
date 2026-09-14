@@ -32,13 +32,17 @@ def _build_lines(order: Order) -> list:
             continue
         name = it.name_snapshot or "Producte"
         unit_price = Decimal(str(it.price_snapshot or 0))
-        key = (name, str(unit_price))
+        # La clau inclou la RONDA (comanda_number): el tiquet de servei ha de
+        # poder mostrar només el que s'ha demanat ARA (decisió Tomeu 14/09/2026).
+        ronda = int(getattr(it, "comanda_number", 1) or 1)
+        key = (name, str(unit_price), ronda)
         if key not in lines:
             lines[key] = {
                 "name": name,
                 "quantity": 0,
                 "unit_price": str(unit_price),
                 "total": Decimal("0"),
+                "comanda_number": ronda,
             }
         lines[key]["quantity"] += it.quantity
         lines[key]["total"] += unit_price * it.quantity
@@ -312,4 +316,132 @@ def render_receipt_escpos(receipt: dict) -> bytes:
     out += b"\x1b\x45\x00"        # negreta OFF
     out += b"\n" * 4               # feed final (espai abans del tall)
     out += b"\x1d\x56\x42\x00"    # GS V → tall parcial de paper
+    return bytes(out)
+
+
+# ============================================================
+# TIQUET DE SERVEI (per portar a taula) — decisió Tomeu 14/09/2026
+# ============================================================
+# NO porta dades fiscals (ni NIF, ni raó social, ni desglossament d'IVA):
+# només és el paper que el cambrer duu a la taula per confirmar la comanda.
+# Conté: nom del departament · nº de comanda (ronda) · SALDO ANTERIOR ·
+# desglossament de la comanda actual · cambrer · import de la comanda.
+
+def build_service_slip(db: Session, order_id, inclou_anterior: bool = True) -> dict:
+    """Tiquet de servei de la comanda actual d'una taula.
+
+    Si `inclou_anterior` i la taula ja tenia consumicions d'una ronda anterior
+    sense pagar, s'hi afegeix el SALDO ANTERIOR i el total acumulat.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise ValueError("Comanda no trobada.")
+
+    center = db.get(Center, order.center_id) if order.center_id else None
+    staff = db.get(Staff, order.staff_id) if order.staff_id else None
+    table = db.get(Table, order.table_id) if order.table_id else None
+
+    # línies NOMÉS d'aquesta ronda
+    ronda = int(getattr(order, "comanda_number", 1) or 1)
+    linies = [
+        l for l in _build_lines(order)
+        if int(l.get("comanda_number") or ronda) == ronda
+    ]
+    importe = sum((Decimal(str(l["total"])) for l in linies), Decimal("0"))
+
+    # saldo anterior: les rondes anteriors del MATEIX compte de taula
+    saldo_anterior = Decimal("0")
+    comandes_anteriors = 0
+    if inclou_anterior and order.table_id:
+        anteriors = (
+            db.query(Order)
+            .filter(
+                Order.table_id == order.table_id,
+                Order.id != order.id,
+                Order.status.notin_(["paid", "cancelled", "closed"]),
+            )
+            .all()
+        )
+        for o in anteriors:
+            if int(getattr(o, "comanda_number", 1) or 1) < ronda:
+                saldo_anterior += Decimal(str(o.total_amount or 0))
+                comandes_anteriors += 1
+
+    return {
+        "type": "servei",
+        "comanda_number": ronda,
+        "table_number": table.number if table else None,
+        "center": {"name": center.name} if center else None,
+        "staff_name": staff.full_name if staff else None,
+        "issued_at": (order.opened_at or datetime.now(timezone.utc)).isoformat(),
+        "lines": linies,
+        "importe_comanda": float(importe),
+        "saldo_anterior": float(saldo_anterior),
+        "comandes_anteriors": comandes_anteriors,
+        "total_acumulat": float(importe + saldo_anterior),
+    }
+
+
+def render_service_slip_text(slip: dict) -> str:
+    """Text pla (80 mm) del tiquet de SERVEI — sense dades fiscals."""
+    out = []
+    sep = "-" * LINE_WIDTH
+    center = slip.get("center") or {}
+
+    if center.get("name"):
+        out.append(_center(str(center["name"]).upper()))
+    out.append(_center("*** COMANDA (sense valor fiscal) ***"))
+    out.append(sep)
+
+    out.append(f"Comanda nº: {slip.get('comanda_number', 1)}")
+    if slip.get("table_number") is not None:
+        out.append(f"Taula: {slip['table_number']}")
+    if slip.get("staff_name"):
+        out.append(f"Cambrer: {slip['staff_name']}")
+    if slip.get("issued_at"):
+        try:
+            from datetime import datetime as _dt
+            _q = _dt.fromisoformat(str(slip["issued_at"]).replace("Z", "+00:00")).astimezone()
+            out.append(f"Data: {_q.strftime('%d/%m/%Y %H:%M:%S')}")
+        except Exception:
+            out.append(f"Data: {slip['issued_at']}")
+    out.append(sep)
+
+    # SALDO ANTERIOR (les rondes que ja hi havia a la taula)
+    if slip.get("saldo_anterior"):
+        out.append(f"Saldo anterior ({slip.get('comandes_anteriors', 0)} com.):")
+        out.append(f"{'':>{LINE_WIDTH - 12}}{slip['saldo_anterior']:>10.2f} EUR")
+        out.append(sep)
+
+    out.append("COMANDAT ARA:")
+    for l in slip.get("lines", []):
+        nom = str(l.get("name") or "")
+        qty = l.get("quantity", 1)
+        import_linia = Decimal(str(l.get("total") or 0))
+        capcalera = f"{qty} x {nom}"
+        out.append(capcalera if len(capcalera) <= LINE_WIDTH - 12 else capcalera[:LINE_WIDTH - 12])
+        out.append(f"{'':>{LINE_WIDTH - 12}}{import_linia:>10.2f} EUR")
+    out.append(sep)
+
+    out.append(f"{'IMPORT COMANDA:':<{LINE_WIDTH - 12}}{slip['importe_comanda']:>10.2f} EUR")
+    if slip.get("saldo_anterior"):
+        out.append(f"{'TOTAL A LA TAULA:':<{LINE_WIDTH - 12}}{slip['total_acumulat']:>10.2f} EUR")
+    out.append(sep)
+    out.append(_center("Sense valor fiscal — porteu-lo a taula"))
+    return "\n".join(out) + "\n"
+
+
+def render_service_slip_escpos(slip: dict) -> bytes:
+    """Bytes ESC/POS del tiquet de servei (per a la impressora del departament)."""
+    return _escpos_from_text(render_service_slip_text(slip))
+
+
+def _escpos_from_text(text: str) -> bytes:
+    """Emboleall ESC/POS mínim: init + text + tall."""
+    out = bytearray()
+    out += b"\x1b@"          # init
+    for linia in text.split("\n"):
+        out += _encode_escpos(linia) + b"\n"
+    out += b"\n\n\n"
+    out += b"\x1dV\x00"      # tall de paper
     return bytes(out)

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { api, getStoredStaff, MenuItem, MenuCategory, Order } from '@/lib/api';
+import { api, apiCarta, getStoredStaff, MenuItem, MenuCategory, Order } from '@/lib/api';
 import { useComandaWs } from '@/lib/useComandaWs';
 
 /**
@@ -26,6 +26,11 @@ export default function ComanderaTaula() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [enviant, setEnviant] = useState(false);
   const [tornId, setTornId] = useState<string | null>(null);
+  //: CHECK «Taules obertes» (decisió Tomeu 14/09/2026): si està HABILITAT,
+  //: el centre permet comptes de taula amb rondes acumulatives (es paga al final);
+  //: si NO, cada consumició s'ha de cobrar i no s'acumula res.
+  //: El valor ve del CENTRE (política del punt de venda), no és una tria puntual.
+  const [taulesObertes, setTaulesObertes] = useState(true);
 
   const staff = typeof window !== 'undefined' ? getStoredStaff() : null;
 
@@ -43,6 +48,15 @@ export default function ComanderaTaula() {
         const totes = await api.getOrders();
         const oberta = totes.find((o) => o.table_id === taulaId && o.status !== 'paid' && o.status !== 'closed');
         if (oberta) setComanda(oberta);
+
+        // política de taules obertes del centre on som
+        try {
+          const idCentre = localStorage.getItem('comanda-centre');
+          if (idCentre) {
+            const cen = await apiCarta.getCenter(idCentre);
+            setTaulesObertes(cen.allows_open_tables !== false);
+          }
+        } catch { /* sense política → per defecte permet */ }
       } catch (e) {
         setMsg({ ok: false, text: e instanceof Error ? e.message : 'Error carregant la carta' });
       }
@@ -89,16 +103,38 @@ export default function ComanderaTaula() {
     if (!carret.length || !staff) return;
     setEnviant(true); setMsg(null);
     try {
+      // Política: sense taules obertes no es pot acumular sobre un compte pendent
+      if (!taulesObertes && comanda) {
+        setMsg({ ok: false, text: '⛔ Aquest punt de venda no permet taules obertes: cal cobrar la comanda abans de fer-ne més.' });
+        setEnviant(false);
+        return;
+      }
       const linies = carret.map((l) => ({ menu_item_id: l.item.id, quantity: l.qty }));
+      let ordreId = comanda?.id || null;
+      const eraNova = !comanda;
+
       if (comanda) {
         await api.addItems(comanda.id, linies);
-        setMsg({ ok: true, text: 'Afegit a la comanda existent ✅' });
       } else {
         const o = await api.createOrder({ table_id: taulaId, items: linies });
         setComanda(o);
-        setMsg({ ok: true, text: 'Comanda enviada a cuina ✅' });
+        ordreId = o?.id || null;
       }
       setCarret([]);
+
+      // Tiquet de SERVEI (opcional, segons el check): sense dades fiscals,
+      // per portar a la taula amb el desglossament i el saldo anterior.
+      let text = eraNova ? 'Comanda enviada' : 'Afegit a la comanda';
+      if (imprimir && ordreId) {
+        try {
+          const { imprimeixTiquetServei } = await import('@/lib/printer');
+          await imprimeixTiquetServei(ordreId);
+          text += ' · tiquet de servei imprès 🖨️';
+        } catch {
+          text += " · (no s'ha pogut imprimir)";
+        }
+      }
+      setMsg({ ok: true, text: text + ' ✅' });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : 'Error enviant' });
     } finally { setEnviant(false); }
@@ -199,6 +235,19 @@ export default function ComanderaTaula() {
             <span className="text-sm" style={{ color: '#9aa7b8' }}>{unitats} articles</span>
             <span className="text-xl font-bold" style={{ color: '#e2b04a' }}>{total.toFixed(2)} €</span>
           </div>
+          <label className="flex items-center gap-3 mb-3 select-none"
+            title={taulesObertes ? 'Aquest punt de venda permet acumular rondes a la taula' : 'Cada consumició s\'ha de cobrar'}>
+            <input type="checkbox" checked={taulesObertes} disabled
+              className="w-5 h-5 accent-amber-400" />
+            <span className="text-sm" style={{ color: taulesObertes ? '#e5e9f0' : '#fca5a5' }}>
+              {taulesObertes ? '🪑 Taules obertes (rondes acumulatives)' : '🪑 Taules obertes DESACTIVADES — cal cobrar cada comanda'}
+            </span>
+            {!taulesObertes && comanda && (
+              <span className="ml-auto text-xs font-bold" style={{ color: '#fca5a5' }}>
+                pendent {parseFloat(String(comanda.total_amount || 0)).toFixed(2)}€
+              </span>
+            )}
+          </label>
           <button onClick={enviar} disabled={enviant}
             className="w-full rounded-2xl font-bold text-lg disabled:opacity-40"
             style={{ height: 56, background: '#e2b04a', color: '#1a1a2e' }}>
