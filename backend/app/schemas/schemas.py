@@ -166,6 +166,19 @@ class MenuItemOut(MenuItemBase):
     id: UUID
 
 
+class MenuItemUpdate(BaseModel):
+    """PATCH parcial: només els camps enviats s'actualitzen (exclude_unset)."""
+    category_id: Optional[UUID] = None
+    income_category_id: Optional[UUID] = None
+    family_id: Optional[UUID] = None
+    center_id: Optional[UUID] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    vat_rate: Optional[float] = None
+    available: Optional[bool] = None
+
+
 # ============================================================
 # RESERVATIONS
 # ============================================================

@@ -7,7 +7,7 @@ from ...db import get_db
 from ...models.models import MenuCategory, MenuItem, IncomeCategory, Family
 from ...schemas.schemas import (
     MenuCategoryCreate, MenuCategoryOut,
-    MenuItemCreate, MenuItemOut,
+    MenuItemCreate, MenuItemOut, MenuItemUpdate,
     IncomeCategoryCreate, IncomeCategoryOut,
     FamilyCreate, FamilyOut,
 )
@@ -92,11 +92,12 @@ def get_item(item_id: UUID, db: Session = Depends(get_db)):
 
 
 @router.patch("/items/{item_id}", response_model=MenuItemOut)
-def update_item(item_id: UUID, payload: MenuItemCreate, db: Session = Depends(get_db)):
+def update_item(item_id: UUID, payload: MenuItemUpdate, db: Session = Depends(get_db)):
     item = db.get(MenuItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Artículo no encontrado")
-    for key, value in payload.model_dump().items():
+    # PATCH parcial: només els camps enviats (exclude_unset) s'actualitzen.
+    for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(item, key, value)
     db.commit()
     db.refresh(item)
