@@ -1,165 +1,198 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, apiCarta, getStoredStaff, Center, Shift } from '@/lib/api';
+import { api, apiCarta, getStoredStaff, Center, Area, Table } from '@/lib/api';
 import { useComandaWs } from '@/lib/useComandaWs';
 
 /**
- * COMANDERA · Sala — visió mòbil: les taules grans, un dit.
- * El capdamunt mostra el cambrer i el seu torn (centre); si no té torn,
- * el pot obrir triant el centre (contracte: POST /shifts/open).
+ * SALA DEL CAMBRER (Comandera) — decisió Tomeu 15/09/2026.
+ *
+ * Què havia passat:
+ *   · Carregava `api.getTables()` SENSE centre → li arribaven les taules de TOTS
+ *     els punts de venda, i per això entrava i li sortia el Xibiu (les primeres
+ *     per ordre alfabètic/número), no el seu centre.
+ *   · No tenia ZONES ni el PLANEJAMENT: era una versió rònica del TPV.
+ *
+ * Ara:
+ *   · Es carrega NOMÉS el pla del centre del torn obert (el del fitxatge).
+ *   · Es mostren les ZONES del centre, amb comptador de taules, igual que al TPV.
+ *   · Es veu el saldo pendent de cada taula i la llegenda d'estats.
+ *   · Disseny de mòbil de veritat: graella gran, un dit, sense sidebar.
  */
-
-type Taula = {
-  id: string;
-  number: number;
-  area_id?: string;
-  status?: string;
-  seats?: number;
-};
-
 export default function ComanderaSala() {
   const router = useRouter();
-  const [taules, setTaules] = useState<Taula[]>([]);
   const [centres, setCentres] = useState<Center[]>([]);
-  const [torn, setTorn] = useState<Shift | null>(null);
+  const [arees, setArees] = useState<Area[]>([]);
+  const [taules, setTaules] = useState<Table[]>([]);
+  const [areaActiva, setAreaActiva] = useState<string>('');
+  const [centreId, setCentreId] = useState<string>('');
+  const [tornId, setTornId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
 
   const staff = typeof window !== 'undefined' ? getStoredStaff() : null;
 
-  const carrega = async () => {
+  /** Carrega el pla de sala DEL CENTRE indicat (només el seu). */
+  const carrega = useCallback(async (cid: string) => {
     try {
-      const [t, cs, ss] = await Promise.all([api.getTables(), apiCarta.getCenters(), api.getShifts()]);
-      setTaules(t as Taula[]);
-      setCentres(cs);
-      const jo = getStoredStaff();
-      const meu = jo ? (ss as Shift[]).find((s) => s.staff_id === jo.id && !s.closed_at) : null;
-      setTorn(meu || null);
+      const [t, a] = await Promise.all([
+        api.getTables(cid || undefined),
+        api.getAreas(cid || undefined),
+      ]);
+      setTaules(t);
+      setArees(a);
+      setAreaActiva((act) => (a.some((x) => x.id === act) ? act : (a[0]?.id ?? '')));
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Error carregant');
-    } finally { setLoading(false); }
-  };
+      setMsg(e instanceof Error ? e.message : 'Error carregant el pla de sala');
+    }
+  }, []);
 
+  /** Arrencada: centres + torn del cambrer (el centre ve del torn/fitxatge). */
   useEffect(() => {
     if (!getStoredStaff()) { router.replace('/comandera'); return; }
-    carrega();
-  }, [router]);
+    (async () => {
+      try {
+        const [cs, ss] = await Promise.all([apiCarta.getCenters(), api.getShifts()]);
+        setCentres(cs);
+        const jo = getStoredStaff();
+        const meu = jo ? ss.find((s) => s.staff_id === jo.id && !s.closed_at) : null;
+        if (meu?.center_id) {
+          setCentreId(meu.center_id);
+          setTornId(meu.id);
+          await carrega(meu.center_id);
+        } else if (meu) {
+          // torn sense centre: agafem el del fitxatge o el primer
+          const c = cs[0]?.id ?? '';
+          setCentreId(c); setTornId(meu.id);
+          await carrega(c);
+        }
+      } catch (e) {
+        setMsg(e instanceof Error ? e.message : 'Error carregant');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [router, carrega]);
 
-  // en viu: si entra o es cobra una comanda, refresquem les taules
+  // en viu: si entra o es cobra una comanda, refresquem el pla del centre
   useComandaWs({
-    onOrderCreated: () => { api.getTables().then((t) => setTaules(t as Taula[])).catch(() => {}); },
-    onOrderPaid: () => { api.getTables().then((t) => setTaules(t as Taula[])).catch(() => {}); },
+    onOrderCreated: () => { if (centreId) void carrega(centreId); },
+    onOrderPaid: () => { if (centreId) void carrega(centreId); },
   });
 
-  const obreTorn = async (centerId: string) => {
-    const jo = getStoredStaff();
-    if (!jo) return;
-    try {
-      await api.openShift(jo.id, centerId);
-      carrega();
-    } catch (e) { setMsg(e instanceof Error ? e.message : 'Error obrint torn'); }
-  };
-
-  /**
-   * PORTER ÚNIC (decisió Tomeu 14/09/2026): si hem entrat amb el token de
-   * Jornada, aquest porta el centre on el cambrer està FITXAT. Obrim el torn
-   * allà directament — el cambrer no ha de triar res.
-   * Si no hi ha centre fitxat, cau al selector manual (compatible enrere).
-   */
-  const obreTornDelFitxatge = async () => {
-    const centreFitxat = typeof window !== 'undefined'
-      ? sessionStorage.getItem('comandera-centre-fitxat')
-      : null;
-    if (!centreFitxat) return;
-    // el centre del token ve com a external_id de Jornada: cal trobar el centre local
-    const match = centres.find(
-      (c) => c.id === centreFitxat || c.external_id === centreFitxat || c.name === centreFitxat,
-    );
-    if (match) {
-      sessionStorage.removeItem('comandera-centre-fitxat');
-      await obreTorn(match.id);
-    }
-  };
-
-  useEffect(() => {
-    if (!loading && !torn && centres.length > 0) {
-      void obreTornDelFitxatge();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, torn, centres.length]);
-
-  const centreNom = (id?: string | null) => centres.find((c) => c.id === id)?.name || '—';
-  const ocupada = (t: Taula) => t.status === 'occupied';
+  const centreNom = centres.find((c) => c.id === centreId)?.name || '—';
+  const visibles = areaActiva ? taules.filter((t) => t.area_id === areaActiva) : taules;
+  const pendent = (t: Table) => Number(t.pending_amount ?? 0);
 
   if (loading) {
-    return <div className="p-6 text-center text-gray-400">Carregant…</div>;
+    return <div className="p-6 text-center" style={{ color: '#9aa7b8', background: '#0f1729', minHeight: '100vh' }}>Carregant el teu pla de sala…</div>;
   }
 
   return (
-    <div className="pb-24" style={{ background: '#0f1729', minHeight: '100vh' }}>
-      {/* capçalera del cambrer */}
-      <div className="px-4 pt-5 pb-4" style={{ background: '#1a1a2e' }}>
+    <div className="pb-28" style={{ background: '#0f1729', minHeight: '100vh' }}>
+
+      {/* ---------- CAPÇALERA DEL CAMBRER ---------- */}
+      <div className="px-4 pt-5 pb-4" style={{ background: '#1a1a2e', borderBottom: '1px solid rgba(226,176,74,.2)' }}>
         <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm text-gray-400">Cambrer</div>
-            <div className="text-lg font-bold" style={{ color: '#e2b04a' }}>{staff?.name || '—'}</div>
+          <div className="min-w-0">
+            <div className="text-xs" style={{ color: '#9aa7b8' }}>Cambrer</div>
+            <div className="text-lg font-bold truncate" style={{ color: '#e2b04a' }}>{staff?.name || '—'}</div>
+            <div className="text-xs mt-0.5" style={{ color: '#9aa7b8' }}>
+              🏪 {centreNom}{tornId ? ' · 🟢 torn obert' : ''}
+            </div>
           </div>
-          <button onClick={() => { localStorage.removeItem('comanda-token'); localStorage.removeItem('comanda-staff'); router.replace('/comandera'); }}
-            className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,.08)', color: '#e5e9f0' }}>
+          <button
+            onClick={() => { localStorage.removeItem('comanda-token'); localStorage.removeItem('comanda-staff'); router.replace('/comandera'); }}
+            className="shrink-0 text-xs px-3 py-2 rounded-lg"
+            style={{ background: 'rgba(255,255,255,.08)', color: '#e5e9f0' }}>
             Sortir
           </button>
         </div>
-
-        {torn ? (
-          <div className="mt-3 text-sm" style={{ color: '#9aa7b8' }}>
-            🟢 Torn obert a <span className="font-bold" style={{ color: '#e5e9f0' }}>{centreNom(torn.center_id)}</span>
-          </div>
-        ) : (
-          <div className="mt-3">
-            <div className="text-sm mb-2" style={{ color: '#9aa7b8' }}>Tria el teu punt de venda per obrir torn:</div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {centres.map((c) => (
-                <button key={c.id} onClick={() => obreTorn(c.id)}
-                  className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
-                  style={{ background: '#e2b04a', color: '#1a1a2e' }}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
-      {msg && <div className="mx-4 mt-3 px-4 py-2 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,.15)', color: '#fca5a5' }}>{msg}</div>}
+      {msg && (
+        <div className="mx-4 mt-3 px-3 py-2 rounded-lg text-sm"
+          style={{ background: 'rgba(239,68,68,.15)', color: '#fca5a5' }}>{msg}</div>
+      )}
 
-      {/* taules, botons grans */}
-      <div className="p-4">
-        <div className="text-sm mb-3" style={{ color: '#9aa7b8' }}>{taules.length} taules</div>
-        <div className="grid grid-cols-3 gap-3">
-          {taules.map((t) => (
-            <button key={t.id} onClick={() => router.push(`/comandera/taula/${t.id}`)}
-              className="rounded-2xl py-5 flex flex-col items-center justify-center transition active:scale-95"
-              style={{
-                background: ocupada(t) ? 'rgba(226,176,74,.18)' : 'rgba(255,255,255,.06)',
-                border: `2px solid ${ocupada(t) ? '#e2b04a' : 'rgba(255,255,255,.1)'}`,
-                minHeight: 92,
-              }}>
-              <span className="text-2xl font-bold" style={{ color: ocupada(t) ? '#e2b04a' : '#e5e9f0' }}>
-                {t.number}
-              </span>
-              <span className="text-[11px] mt-1" style={{ color: '#9aa7b8' }}>
-                {ocupada(t) ? 'ocupada' : 'lliure'}{t.seats ? ` · ${t.seats}p` : ''}
-              </span>
-            </button>
-          ))}
-          {taules.length === 0 && (
-            <div className="col-span-3 text-center py-10 text-gray-500 text-sm">
-              No hi ha taules configurades
-            </div>
-          )}
+      {/* ---------- ZONES (igual que al TPV) ---------- */}
+      {arees.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto px-4 py-3">
+          <button onClick={() => setAreaActiva('')}
+            className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
+            style={{
+              background: areaActiva === '' ? '#e2b04a' : 'rgba(255,255,255,.07)',
+              color: areaActiva === '' ? '#1a1a2e' : '#e5e9f0',
+            }}>
+            Totes ({taules.length})
+          </button>
+          {arees.map((a) => {
+            const n = taules.filter((t) => t.area_id === a.id).length;
+            const act = areaActiva === a.id;
+            return (
+              <button key={a.id} onClick={() => setAreaActiva(a.id)}
+                className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{
+                  background: act ? '#e2b04a' : 'rgba(255,255,255,.07)',
+                  color: act ? '#1a1a2e' : '#e5e9f0',
+                }}>
+                {a.name} ({n})
+                {Number(a.surcharge_percent) > 0 ? ` +${a.surcharge_percent}%` : ''}
+              </button>
+            );
+          })}
         </div>
+      )}
+
+      {/* ---------- GRAELLA DE TAULES (un dit, gran) ---------- */}
+      {visibles.length === 0 ? (
+        <div className="px-4 py-16 text-center text-sm rounded-2xl mx-4"
+          style={{ background: 'rgba(255,255,255,.04)', color: '#9aa7b8' }}>
+          {arees.length === 0
+            ? 'Aquest punt de venda encara no té zones ni taules configurades.'
+            : 'No hi ha taules en aquesta zona.'}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 px-4 py-2">
+          {visibles.map((t) => {
+            const p = pendent(t);
+            const oberta = p > 0 || t.status === 'occupied';
+            const color = t.status === 'reserved' ? '#3b82f6'
+              : t.status === 'needs_cleaning' ? '#a855f7'
+              : t.status === 'blocked' ? '#6b7280'
+              : oberta ? '#e2b04a' : '#22c55e';
+            return (
+              <button key={t.id}
+                onClick={() => router.push(`/comandera/taula/${t.id}`)}
+                className="relative rounded-2xl p-4 text-center transition active:scale-95"
+                style={{
+                  background: 'rgba(255,255,255,.05)',
+                  border: `2px solid ${color}`,
+                  minHeight: 108,
+                }}>
+                <div className="font-bold" style={{ color, fontSize: 26, lineHeight: 1.1 }}>{t.number}</div>
+                <div className="text-xs mt-1" style={{ color: '#9aa7b8' }}>{t.seats}p</div>
+                {p > 0 && (
+                  <div className="mt-2 inline-block px-2 py-0.5 rounded-full font-bold"
+                    style={{ background: '#e2b04a', color: '#1a1a2e', fontSize: 12 }}>
+                    {p.toFixed(2)}€
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ---------- LLEGENDA d'estats (els colors) ---------- */}
+      <div className="flex items-center gap-4 flex-wrap px-4 py-4 text-xs" style={{ color: '#9aa7b8' }}>
+        {[['#22c55e', 'Lliure'], ['#e2b04a', 'Ocupada'], ['#3b82f6', 'Reservada'],
+          ['#a855f7', 'Per netejar'], ['#6b7280', 'Bloquejada']].map(([c, nom]) => (
+          <span key={nom} className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-full" style={{ background: c }} />{nom}
+          </span>
+        ))}
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <IdiomaProvider>
     <div className="flex h-screen overflow-hidden">
-      <nav className="w-64 shrink-0 h-screen bg-brand-navy border-r border-brand-gold/20 flex flex-col justify-center overflow-y-auto">
+      <nav className="hidden md:flex w-64 shrink-0 h-screen bg-brand-navy border-r border-brand-gold/20 flex-col justify-center overflow-y-auto">
         <div className="px-6 py-8 border-b border-brand-gold/20">
           <h1 className="text-2xl font-bold text-brand-gold tracking-tight">Comanda</h1>
           <p className="text-xs text-gray-400">TPV Bar/Restaurant</p>

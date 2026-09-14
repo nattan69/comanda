@@ -496,6 +496,11 @@ export const apiTable = {
     const q = centerId ? `?center_id=${encodeURIComponent(centerId)}` : '';
     return apiRequest<Area[]>(`/tables/areas${q}`);
   },
+  /** Taules del pla de sala d'un centre (el pla és PER CENTRE). */
+  async getTables(centerId?: string): Promise<Table[]> {
+    const q = centerId ? `?center_id=${encodeURIComponent(centerId)}` : '';
+    return apiRequest<Table[]>(`/tables${q}`);
+  },
   /** Canvia la quantitat d'una línia de comanda. */
   async updateLine(orderId: string, lineId: string, quantity: number) {
     return apiRequest(`/orders/${orderId}/items/${lineId}`, {
