@@ -2,7 +2,7 @@
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, MenuCategory, MenuItem } from '@/lib/api';
-import { getT, Lang } from '@/lib/i18n';
+import { useIdioma } from '@/lib/idioma';
 import { Plus, ShoppingCart, CreditCard, Printer, Undo2 } from 'lucide-react';
 import ModalCobrar from '@/components/ModalCobrar';
 import ModalVoid from '@/components/ModalVoid';
@@ -12,8 +12,7 @@ import { getStoredStaff } from '@/lib/api';
 function OrdersPageInner() {
   const searchParams = useSearchParams();
   const tableId = searchParams.get('table');
-  const [lang] = useState<Lang>('ca');
-  const t = getT(lang);
+  const { lang, t } = useIdioma();
 
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);

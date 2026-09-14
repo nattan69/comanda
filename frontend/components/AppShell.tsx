@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import { LayoutDashboard, ClipboardList, Languages, Calculator } from 'lucide-react';
 import LogoutLink from '@/components/LogoutLink';
 import RoomCharge from '@/components/RoomCharge';
-import ShiftBar from '@/components/ShiftBar';
+import Header from '@/components/Header';
+import { IdiomaProvider } from '@/lib/idioma';
 
 /**
  * Shell de l'aplicació d'ESCRIPTORI (TPV): sidebar + main.
@@ -19,6 +20,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <IdiomaProvider>
     <div className="flex h-screen overflow-hidden">
       <nav className="w-64 shrink-0 h-screen bg-brand-navy border-r border-brand-gold/20 flex flex-col justify-center overflow-y-auto">
         <div className="px-6 py-8 border-b border-brand-gold/20">
@@ -62,11 +64,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <main className="flex-1 overflow-y-auto p-0">
-        <ShiftBar />
-        <RoomCharge />
-        {children}
+      <main className="flex-1 overflow-y-auto p-0 flex flex-col">
+        <Header />
+        <div className="flex-1">
+          <RoomCharge />
+          {children}
+        </div>
       </main>
     </div>
+    </IdiomaProvider>
   );
 }

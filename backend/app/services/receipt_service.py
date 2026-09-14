@@ -186,6 +186,18 @@ def render_receipt_text(receipt: dict) -> str:
             out.append(_center(addr))
     if center and center.get("name"):
         out.append(_center(f'Centre: {center["name"]}'))
+
+    # DATA I HORA d'emissió (decisió Tomeu 14/09/2026): tots els tiquets en duen,
+    # tant en imprimir com en cobrar. Es formata en hora local del servei.
+    if h.get("issued_at"):
+        try:
+            from datetime import datetime as _dt
+            _iso = str(h["issued_at"])
+            _quan = _dt.fromisoformat(_iso.replace("Z", "+00:00"))
+            _local = _quan.astimezone()
+            out.append(_center(_local.strftime("%d/%m/%Y  %H:%M:%S")))
+        except Exception:
+            out.append(_center(str(h["issued_at"])))
     out.append(sep)
 
     # Marca ben visible (anul·lat / còpia)
@@ -201,8 +213,6 @@ def render_receipt_text(receipt: dict) -> str:
     code = (payment.get("ticket_code") or receipt.get("ticket_code") or "")
     if code:
         out.append(_center(f"Tiquet: {code}"))
-    if h.get("issued_at"):
-        out.append(_center(f"Data: {h['issued_at'][:19].replace('T', ' ')}"))
     if h.get("staff_name"):
         out.append(_center(f"Cambrer: {h['staff_name']}"))
     if h.get("table_number") is not None:

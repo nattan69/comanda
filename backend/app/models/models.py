@@ -192,6 +192,7 @@ class Order(Base):
     closed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
@@ -238,6 +239,7 @@ class Payment(Base):
     pms_response = Column(JSON)  # resposta del PMS (per audit)
     paid_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 # ============================================================
@@ -391,6 +393,8 @@ class Shift(Base):
     status = Column(String, nullable=False, default='open')  # open, closed
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     # Liquidació personal (completada al tancar el torn)
     cash_declared = Column(Numeric(10, 2))  # efectiu que el cambrer declara entregar
     card_total = Column(Numeric(10, 2))  # total de targetes del torn (calculat pel sistema)
