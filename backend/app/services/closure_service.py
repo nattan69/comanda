@@ -17,7 +17,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from sqlalchemy.orm import Session
 
-from ..models.models import DayClosure, Order, OrderItem, Payment, Void
+from ..models.models import DayClosure, Order, OrderItem, Payment, Void, Shift, Staff, Center
 from .ticket_service import next_ticket_number
 from .pms_adapter import get_pms_adapter
 from .comanda_client import envia_cierre_a_compta
@@ -255,6 +255,74 @@ def _compute_summary(db: Session, closure_date: date, close_open: bool) -> dict:
     return summary
 
 
+def _liquidacions_de_cambrers(db: Session, closure_date: date) -> dict:
+    """LIQUIDACIONS DELS CAMBRERS DEL DIA — perquè l'encarregat les repassi.
+
+    (decisió Tomeu 18/09/2026) La Z no només ha de quadrar la caixa: ha de
+    dur la liquidació de TOTS els cambrers del centre, amb el seu efectiu
+    entregat, els errors que han assumit, el desquadre i les targetes/crèdits
+    que es donen per bons (els certifica Jornada). L'encarregat les repassa i
+    firma el tancament amb elles al davant.
+
+    Sort en dos blocs: els torns TANCATS durant la data de negoci, i els que
+    encara estan OBERTS (els cambrers que no han fet logout) — perquè un torn
+    sense tancar és precisament el que fa que la caixa no quadri.
+    """
+    start, end = _day_bounds(closure_date)
+    torns = (
+        db.query(Shift)
+        .filter(
+            Shift.opened_at >= start,
+            Shift.opened_at < end,
+        )
+        .order_by(Shift.opened_at.asc())
+        .all()
+    )
+
+    def _fila(torn: Shift) -> dict:
+        staff = db.get(Staff, torn.staff_id)
+        centre = db.get(Center, torn.center_id) if torn.center_id else None
+        liq = torn.liquidation or {}
+        return {
+            "shift_id": str(torn.id),
+            "staff_id": str(torn.staff_id),
+            "staff_name": staff.full_name if staff else "—",
+            "center_id": str(torn.center_id) if torn.center_id else None,
+            "center_name": centre.name if centre else None,
+            "status": torn.status,
+            "opened_at": torn.opened_at.isoformat() if torn.opened_at else None,
+            "closed_at": torn.closed_at.isoformat() if torn.closed_at else None,
+            "venda": liq.get("gross_sales", "0"),
+            "comandes": liq.get("orders_count", 0),
+            "efectiu_esperat": liq.get("cash_expected", "0"),
+            "efectiu_entregat": liq.get("cash_declared"),
+            "errors": liq.get("errors", "0"),
+            "desquadre": liq.get("desquadre"),
+            "desquadre_pendent": liq.get("desquadre_pendent"),
+            "observacions": liq.get("observations"),
+            # PER BONS: ho certifica Jornada, no es compta a mà
+            "per_bons": liq.get("per_bons", {}),
+        }
+
+    files = [_fila(t) for t in torns if t.status == "closed"]
+    oberts = [_fila(t) for t in torns if t.status != "closed"]
+
+    def _suma(rows, clau):
+        return str(sum((Decimal(str(r.get(clau) or 0)) for r in rows), Decimal("0")))
+
+    return {
+        "cambrers": files,
+        "count": len(files),
+        "total_efectiu_esperat": _suma(files, "efectiu_esperat"),
+        "total_efectiu_entregat": _suma(files, "efectiu_entregat"),
+        "total_errors": _suma(files, "errors"),
+        "total_desquadre_pendent": _suma(files, "desquadre_pendent"),
+        "torns_oberts": oberts,
+        "count_oberts": len(oberts),
+        "total_obert_efectiu_esperat": _suma(oberts, "efectiu_esperat"),
+    }
+
+
 def preview_day_closure(db: Session, closure_date: date) -> dict:
     """Informe X (pre-tancament): lectura del dia, sense tancar res.
 
@@ -262,6 +330,9 @@ def preview_day_closure(db: Session, closure_date: date) -> dict:
     `DayClosure`; les comandes obertes surten llistades a `open_orders`.
     """
     summary = _compute_summary(db, closure_date, close_open=False)
+    # LIQUIDACIONS DELS CAMBRERS: van a la X perquè l'encarregat les vegi
+    # ABANS de fer la Z (decisió Tomeu 18/09/2026).
+    summary["liquidacions_cambrers"] = _liquidacions_de_cambrers(db, closure_date)
     return {"report_type": "X", "closure_date": closure_date.isoformat(), "summary": summary}
 
 
@@ -276,6 +347,12 @@ def run_day_closure(db: Session, closure_date: date) -> DayClosure:
         return existing
 
     summary = _compute_summary(db, closure_date, close_open=True)
+
+    # LIQUIDACIONS DELS CAMBRERS DEL CENTRE (decisió Tomeu 18/09/2026): la Z
+    # duu la liquidació de TOTS els cambrers perquè l'encarregat la repassi i
+    # la firmi amb elles al davant. Els torns que quedin oberts surten marcats:
+    # un torn sense tancar és el que fa que la caixa no quadri.
+    summary["liquidacions_cambrers"] = _liquidacions_de_cambrers(db, closure_date)
 
     # Seqüència anual de la Z (independent de la dels tiquets).
     _, z_code = next_ticket_number(db, "Z")

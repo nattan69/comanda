@@ -376,7 +376,15 @@ class ShiftOpen(BaseModel):
 
 
 class ShiftClose(BaseModel):
+    """Liquidació personal del cambrer (decisió Tomeu 18/09/2026).
+
+    El cambrer que duu moviments no surt sense quadrar: el modal li demana
+    l'efectiu entregat i els errors que assumeix. Les targetes i els crèdits a
+    habitació es donen PER BONS (els certifica Jornada) i no es sumen a mà.
+    """
     cash_declared: Optional[float] = None
+    errors: Optional[float] = None
+    observations: Optional[str] = None
 
 
 class ShiftOut(BaseModel):

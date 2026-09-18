@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api, getStoredStaff } from '@/lib/api';
+import { api, apiCarta, getStoredStaff } from '@/lib/api';
 
 /**
  * COMANDERA — l'app dels cambrers (PWA). Login optimitzat per mòbil/PDA:
@@ -37,6 +37,9 @@ function LoginComandera() {
         if (res.center_external_id) {
           sessionStorage.setItem('comandera-centre-fitxat', res.center_external_id);
         }
+        // El porter ja ha fitxat el cambrer: el torn es DERIVA d'allà, així que
+        // no cal obrir-ne cap a mà. Si no en té, n'obrim un de local.
+        await obreTorn();
         router.replace('/comandera/sala');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'El token de Jornada no és vàlid');
@@ -50,11 +53,36 @@ function LoginComandera() {
     setLoading(true); setError(null);
     try {
       await api.login(p, 'Comandera');
+      // OBRIR EL TORN en entrar (decisió Tomeu 18/09/2026): sense torn obert el
+      // cambrer no compta al panell de servei i les seves comandes no queden
+      // lligades enlloc → la LIQUIDACIÓ del logout sortiria a zero.
+      await obreTorn();
       router.replace('/comandera/sala');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'PIN incorrecte');
       setPin('');
     } finally { setLoading(false); }
+  };
+
+  /** Obre el torn del cambrer al primer punt de venda (si no en té cap d'obert). */
+  const obreTorn = async () => {
+    const jo = getStoredStaff();
+    if (!jo?.id) return;
+    try {
+      const existent = await api.elMeuTorn(jo.id);
+      if (existent) {
+        // El centre del torn mana (pot ser el del fitxatge a Jornada).
+        try { localStorage.setItem('comanda-centre', existent.center_id || ''); } catch { /* privat */ }
+        return;
+      }
+      const centres = await apiCarta.getCenters();
+      const cid = centres[0]?.id;
+      if (!cid) return;
+      const t = await api.openShift(jo.id, cid);
+      try { localStorage.setItem('comanda-centre', t.center_id || cid); } catch { /* privat */ }
+    } catch {
+      // Si ja en tenia un (doble clic), no és cap error: hi som de servei.
+    }
   };
 
   const digit = (d: string) => {

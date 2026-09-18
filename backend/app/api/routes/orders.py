@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 from ...db import get_db
+from ...deps import require_auth
 from ...models.models import Order, OrderItem, MenuItem, Void, Payment, RoomCredit, Center, Table, Staff
 from ...schemas.schemas import (
     OrderCreate,
@@ -63,7 +64,33 @@ def list_orders(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
-def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
+def create_order(
+    payload: OrderCreate,
+    db: Session = Depends(get_db),
+    sessio=Depends(require_auth),
+):
+    """Crea una comanda.
+
+    El CAMBRER no ve del cos sinó de la SESSIÓ autenticada (decisió Tomeu
+    18/09/2026): el token ja diu qui és, i així cap comanda pot quedar òrfena
+    de torn pel fet que el client no enviï `staff_id`.
+    """
+    # === CAMBRER I TORN (decisió Tomeu 18/09/2026) ===
+    # 1) El cambrer ve de la SESSIÓ (el token), no del cos.
+    # 2) El torn es DERIVA del seu torn obert. Sense això, cap comanda quedava
+    #    lligada al torn i la LIQUIDACIÓ PERSONAL del logout sortia sempre a
+    #    zero (bony gros detectat 18/09/2026).
+    staff_id = payload.staff_id or getattr(sessio, "staff_id", None)
+    shift_id = payload.shift_id
+    if shift_id is None and staff_id:
+        from ...services.shift_service import torn_obert_de
+
+        torn = torn_obert_de(db, staff_id)
+        if torn is not None:
+            shift_id = torn.id
+            if payload.center_id is None:
+                payload.center_id = torn.center_id
+
     # === COMANDA SUCCESSIVA (decisió Tomeu 14/09/2026) ===
     # Si la taula ja té un compte obert (una comanda sense pagar), aquesta nova
     # comanda és una RONDA MÉS: el número s'incrementa (2, 3...) i el seu import
@@ -94,10 +121,11 @@ def create_order(payload: OrderCreate, db: Session = Depends(get_db)):
                 )
             ronda = int(getattr(darrera, "comanda_number", 1) or 1) + 1
 
+    # === TORN DERIVAT (decisió Tomeu 18/09/2026) ===
     order = Order(
         table_id=payload.table_id,
-        staff_id=payload.staff_id,
-        shift_id=payload.shift_id,
+        staff_id=staff_id,
+        shift_id=shift_id,
         center_id=payload.center_id,
         order_type=payload.order_type,
         notes=payload.notes,
@@ -443,14 +471,28 @@ def pay_order(order_id: UUID, payload: PaymentRequest, db: Session = Depends(get
     )
     db.add(payment)
 
+    # La comanda guarda el nº d'habitació del càrrec: els papers de la
+    # liquidació del cambrer (i la Z) els necessiten per al sobre
+    # (decisió Tomeu 18/09/2026). El titular (guest_name) viu al pagament.
+    if method == "room_charge" and payload.room_number and not order.room_number:
+        order.room_number = payload.room_number
+    # El motiu de les invitacions i els nuls també queda a la comanda.
+    if method in ("house", "anul") and payload.reason and not order.notes:
+        order.notes = payload.reason
+
     # Tancar la comanda si el pagament (o la suma dels pagaments) cobreix el total.
+    # ⚠️ EXCEPCIÓ: el NUL tanca SEMPRE la comanda (decisió Tomeu 18/09/2026).
+    # Un nul s'enregistra amb import 0, així que «0 >= total» mai no es complia
+    # i la comanda quedava Oberta per sempre — apareixia com a taula sense
+    # cobrar a la liquidació del cambrer i a la Z. Un nul és una anul·lació de
+    # consumició: la comanda queda tancada i fora de la venda.
     paid_total = (
         db.query(func.sum(Payment.amount))
         .filter(Payment.order_id == order_id, Payment.status == "completed")
         .scalar()
     )
     paid_total = Decimal(str(paid_total or 0)) + Decimal(str(payload.amount))
-    if paid_total >= Decimal(str(order.total_amount or 0)):
+    if method in ("anul", "null") or paid_total >= Decimal(str(order.total_amount or 0)):
         order.status = "paid"
         order.closed_at = datetime.now()
 

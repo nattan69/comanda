@@ -115,3 +115,64 @@ export async function imprimeixTiquetCuina(orderId: string): Promise<'gateway' |
   if (!res.ok) throw new Error(`Error ${res.status} generant el tiquet de cuina`);
   return printEscpos(await res.arrayBuffer());
 }
+
+/**
+ * Baixa un full de LIQUIDACIÓ en bytes ESC/POS i tira'l a la IMPRESSORA
+ * TÈRMICA DE TIQUETS (decisió Tomeu 18/09/2026).
+ *
+ * Els fulls de liquidació s'imprimeixen a la MATEIXA tèrmica de 80 mm que els
+ * tiquets: per això el backend els dona en ESC/POS i aquí només s'envien.
+ */
+async function imprimeixEscpos(url: string): Promise<'gateway' | 'webusb'> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('comanda-token') || '' : '';
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Error ${res.status} generant el document`);
+  return printEscpos(await res.arrayBuffer());
+}
+
+/** LIQUIDACIÓ D'UN CAMBRER (el full que firma i va dins el sobre). */
+export async function imprimeixLiquidacioCambrer(shiftId: string): Promise<'gateway' | 'webusb'> {
+  return imprimeixEscpos(`${API_URL_FETCH}/shifts/${shiftId}/liquidacio?format=escpos`);
+}
+
+/** FULL DE MOVIMENTS del torn (els justificants línia a línia). */
+export async function imprimeixMovimentsCambrer(shiftId: string): Promise<'gateway' | 'webusb'> {
+  return imprimeixEscpos(`${API_URL_FETCH}/shifts/${shiftId}/moviments?format=escpos`);
+}
+
+/** LIQUIDACIÓ DELS CAMBRERS DEL CENTRE (el full que firma l'ENCARREGAT). */
+export async function imprimeixLiquidacioCentre(data?: string): Promise<'gateway' | 'webusb'> {
+  const q = data ? `?data=${encodeURIComponent(data)}&format=escpos` : '?format=escpos';
+  return imprimeixEscpos(`${API_URL_FETCH}/shifts/liquidacio/centre${q}`);
+}
+
+/** LA Z (tancament de caixa) amb la liquidació dels cambrers inclosa. */
+export async function imprimeixZ(data: string): Promise<'gateway' | 'webusb'> {
+  return imprimeixEscpos(`${API_URL_FETCH}/closure/${encodeURIComponent(data)}/z-ticket?format=escpos`);
+}
+
+/** LA X (pre-tancament) amb la liquidació dels cambrers inclosa. */
+export async function imprimeixX(data: string): Promise<'gateway' | 'webusb'> {
+  return imprimeixEscpos(`${API_URL_FETCH}/closure/${encodeURIComponent(data)}/x-ticket?format=escpos`);
+}
+
+/**
+ * Obre un document de liquidació en TEXT PLA per imprimir-lo des del navegador.
+ * És el pla B quan no hi ha impressora tèrmica configurada: el cambrer o
+ * l'encarregat l'imprimeixen en un full normal i el firmen igualment.
+ */
+export async function obreDocumentText(url: string): Promise<void> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('comanda-token') || '' : '';
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Error ${res.status} generant el document`);
+  const text = await res.text();
+  const w = window.open('', '_blank');
+  if (!w) throw new Error('El navegador ha bloquejat la finestra');
+  w.document.write(
+    `<pre style="font-family:monospace;font-size:12px;line-height:1.25">${text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`,
+  );
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
+}

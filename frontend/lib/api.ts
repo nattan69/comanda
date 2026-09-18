@@ -105,12 +105,102 @@ export type Shift = {
   opened_at: string;
   closed_at?: string | null;
 };
+
+/** Torn obert d'un cambrer (GET /shifts/obert). */
+export type TornObert = {
+  id: string;
+  staff_id: string;
+  center_id: string | null;
+  center_name?: string | null;
+  status: string;
+  opened_at?: string | null;
+};
+
+/**
+ * X PERSONAL del torn (POST /shifts/{id}/x) — el resum del modal de liquidació.
+ *
+ * `per_bons` són els imports que el cambrer NO ha de sumar a mà perquè els
+ * certifica Jornada (targetes i crèdits a habitació).
+ * `obertes` són les taules que encara deu: si n'hi ha, no pot sortir net.
+ */
+export type XPersonal = {
+  report_type: string;
+  shift_id: string;
+  staff_id: string;
+  staff_name?: string | null;
+  center_id?: string | null;
+  center_name?: string | null;
+  opened_at?: string | null;
+  status: string;
+  summary: {
+    gross_sales: string;
+    orders_count: number;
+    payments_by_method: Record<string, string>;
+    non_sale?: { total: string; orders: number };
+    house?: { total: string; orders: number };
+    voids?: { count: number; total: string };
+    cash_expected: string;
+    card_total: string;
+    room_charge_total?: string;
+    per_bons: { targeta_credit: string; carrec_habitacio: string; total: string };
+    obertes: {
+      count: number;
+      total: string;
+      items: { order_id: string; comanda_number: number; total: string; status: string }[];
+    };
+  };
+};
+/**
+ * LIQUIDACIÓ D'UN CAMBRER (dins de la X i la Z).
+ *
+ * La Z duu la liquidació de TOTS els cambrers del torn perquè l'encarregat la
+ * repassi abans de firmar (decisió Tomeu 18/09/2026). `per_bons` és el que
+ * certifica Jornada (targetes i crèdits) i no es compta a mà.
+ */
+export type LiquidacioCambrer = {
+  shift_id: string;
+  staff_id: string;
+  staff_name: string;
+  center_id?: string | null;
+  center_name?: string | null;
+  status: string;
+  opened_at?: string | null;
+  closed_at?: string | null;
+  venda: string;
+  comandes: number;
+  efectiu_esperat: string;
+  efectiu_entregat?: string | null;
+  errors: string;
+  desquadre?: string | null;
+  desquadre_pendent?: string | null;
+  observacions?: string | null;
+  per_bons?: { targeta_credit?: string; carrec_habitacio?: string; total?: string };
+};
+
+/** Bloc de liquidacions de cambrers que acompanya la X i la Z. */
+export type LiquidacionsCambrers = {
+  cambrers: LiquidacioCambrer[];
+  count: number;
+  total_efectiu_esperat: string;
+  total_efectiu_entregat: string;
+  total_errors: string;
+  total_desquadre_pendent: string;
+  torns_oberts: LiquidacioCambrer[];
+  count_oberts: number;
+  total_obert_efectiu_esperat: string;
+};
+
 export type DayClosure = {
   id: string;
   closure_date: string;
   status?: string;
   totals?: Record<string, number>;
   created_at?: string;
+  summary?: {
+    z_number?: string;
+    liquidacions_cambrers?: LiquidacionsCambrers;
+    [k: string]: unknown;
+  };
 };
 
 /**
@@ -215,6 +305,38 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ staff_id: staffId, center_id: centerId }),
     });
+  },
+
+  /** El torn OBRT del cambrer (o null). El centre surt d'aquí. */
+  async elMeuTorn(staffId: string): Promise<TornObert | null> {
+    return apiRequest<TornObert | null>(`/shifts/obert?staff_id=${encodeURIComponent(staffId)}`);
+  },
+
+  /**
+   * X PERSONAL del torn: què duu fet el cambrer (sense tancar).
+   *
+   * És el resum que omple el MODAL DE LIQUIDACIÓ abans d'entregar: efectiu
+   * esperat, targetes i crèdits (per bons, els certifica Jornada), taules
+   * encara obertes i anul·lacions.
+   */
+  async xPersonal(shiftId: string): Promise<XPersonal> {
+    return apiRequest<XPersonal>(`/shifts/${shiftId}/x`, { method: 'POST' });
+  },
+
+  /**
+   * TANCA EL TORN amb la liquidació personal (contracte: POST /shifts/{id}/close).
+   *
+   * `cash_declared` = efectiu ENTREGAT a caixa · `errors` = diferències que el
+   * cambrer assumeix. El backend calcula el desquadre i el desquadre pendent.
+   */
+  async closeShift(
+    shiftId: string,
+    payload: { cash_declared?: number | null; errors?: number | null; observations?: string | null },
+  ): Promise<Shift & { liquidation?: Record<string, unknown> | null }> {
+    return apiRequest<Shift & { liquidation?: Record<string, unknown> | null }>(
+      `/shifts/${shiftId}/close`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
   },
 
   async sessionExchange(jornadaToken: string, deviceName = 'Comandera'): Promise<{

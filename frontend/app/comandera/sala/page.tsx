@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, apiCarta, getStoredStaff, Center, Area, Table } from '@/lib/api';
 import { useComandaWs } from '@/lib/useComandaWs';
+import BotoSortirCambrer from '@/components/BotoSortirCambrer';
 
 /**
  * SALA DEL CAMBRER (Comandera) — decisió Tomeu 15/09/2026.
@@ -102,12 +103,9 @@ export default function ComanderaSala() {
               🏪 {centreNom}{tornId ? ' · 🟢 torn obert' : ''}
             </div>
           </div>
-          <button
-            onClick={() => { localStorage.removeItem('comanda-token'); localStorage.removeItem('comanda-staff'); router.replace('/comandera'); }}
+          <BotoSortirCambrer
             className="shrink-0 text-xs px-3 py-2 rounded-lg"
-            style={{ background: 'rgba(255,255,255,.08)', color: '#e5e9f0' }}>
-            Sortir
-          </button>
+            style={{ background: 'rgba(255,255,255,.08)', color: '#e5e9f0' }} />
         </div>
       </div>
 

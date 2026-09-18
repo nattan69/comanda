@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Comanda · Liquidació del cambrer, X i Z (decisió Tomeu 18/09/2026)
+#
+# Estat: IMPLEMENTAT I VERIFICAT al OnePlus (banc de proves).
+# PENDENT de replicar al PC de na Maria (font oficial) + pujar al repo.
+#
+# ── QUÈ S'HA FET ─────────────────────────────────────────────
+# 1. LOGOUT DEL CAMBRER AMB LIQUIDACIÓ (si duu moviments, no surt sense quadrar)
+#    · modal: efectiu entregat + errors
+#    · targetes i crèdits PER BONS (els certifica Jornada, no es sumen a mà)
+#    · desquadre i desquadre pendent en directe
+#    · avís si té taules sense cobrar
+# 2. DOCUMENTS IMPRIMIBLES A LA TÈRMICA DE TIQUETS (80 mm), per signar i ficar
+#    dins el sobre:
+#      · Liquidació del cambrer      GET /shifts/{id}/liquidacio
+#      · Full de moviments del torn  GET /shifts/{id}/moviments
+#      · Liquidació dels cambrers    GET /shifts/liquidacio/centre?data=
+#      · Tiquet de la X              GET /closure/{data}/x-ticket
+#      · Tiquet de la Z              GET /closure/{data}/z-ticket
+#    Tots amb ?format=text|escpos. Tots amb requadre de signatura.
+# 3. LA X I LA Z DUEN LA LIQUIDACIÓ DE TOTS ELS CAMBRERS (l'encarregat la repassa
+#    i la firma). Els torns SENSE TANCAR surten remarcats.
+# 4. TRES BONYS GROSSOS ARREGLATS:
+#    a) les comandes es creaven sense shift_id → la liquidació hauria sortit 0,00
+#       (ara: cambrer de la SESSIÓ + torn derivat del torn obert)
+#    b) el NUL no tancava la comanda → quedava oberta per sempre
+#    c) verify_e2e.py trencat des de la capa d'autenticació (ara fa login)
+#
+# ── FITXERS ──────────────────────────────────────────────────
+# backend/app/services/shift_service.py       (reescrit: liquidació completa)
+# backend/app/services/liquidacio_service.py  (NOU: els 5 documents + render ESC/POS)
+# backend/app/services/closure_service.py     (_liquidacions_de_cambrers + a la X/Z)
+# backend/app/api/routes/shifts.py            (X personal, obert, 3 documents)
+# backend/app/api/routes/closure.py           (x-ticket, z-ticket)
+# backend/app/api/routes/orders.py            (staff de la sessió, torn derivat, nul tanca)
+# backend/app/schemas/schemas.py              (ShiftClose: errors, observations)
+# backend/verify_e2e.py                       (arreglat)
+# backend/scripts/prova_liquidacio_cambrer.py      (NOU)
+# backend/scripts/prova_documents_liquidacio.py    (NOU)
+# frontend/components/BotoSortirCambrer.tsx        (NOU)
+# frontend/components/PanellLiquidacionsCambrers.tsx (NOU)
+# frontend/lib/printer.ts                     (impressió dels fulls)
+# frontend/lib/api.ts                         (tipus + crides)
+# frontend/app/comandera/page.tsx             (obre el torn en fer login)
+# frontend/app/comandera/sala/page.tsx        (botó Sortir nou)
+# frontend/app/tancament/page.tsx             (botons d'imprimir X/Z/liquidacions)
+# docs/LIQUIDACIO_CAMBRER.md                  (NOU: contracte tècnic complet)
+#
+# ── COM VERIFICAR-HO ─────────────────────────────────────────
+#   cd backend
+#   python3 verify_e2e.py                          # flux complet
+#   python3 scripts/prova_liquidacio_cambrer.py    # liquidació, per bons, Z
+#   python3 scripts/prova_documents_liquidacio.py  # els 5 documents + ESC/POS
+#   cd ../frontend && npx tsc --noEmit && npx next build
+#
+# ── PITFALLS (llegeix-los, són mossegades) ───────────────────
+# · El renderitzador genèric de tiquets posa en NEGRETA tota línia que comenci
+#   per "TOTAL" → se'n menja les línies de signatura. Per això els fulls de
+#   liquidació tenen render propi a liquidacio_service.
+# · Les línies de punts de signatura es CALCULEN; escrites a mà se surten dels
+#   48 caràcters i la impressora les talla.
+# · El guió llarg "—" NO existeix a CP858 (surt com a brossa). Fer servir "-".
+# · SQLite desa els UUID sense guions: en comprovar a la BD, normalitzar.
+# · Un `.env` és per entorn: el secret del porter s'ha d'igualar als 3 serveis.
+#
+# ── QUÈ CAL FER AL PC DE NA MARIA ────────────────────────────
+# 1. Portar aquests fitxers (o fer git pull quan estigui pujat).
+# 2. Re-buildar el front:  rm -rf .next  (la cache conserva el hash vell)
+#    i tornar a arrencar el backend (:8000/:3001) i la demo (:8030).
+# 3. Passar les tres proves del punt anterior.
+# 4. Comprovar en viu: PIN -> Sortir -> modal de liquidació -> imprimir els
+#    fulls a la tèrmica ; i a /tancament, imprimir la X i la Z.
+#
+# ⚠️ CAP SERVEI EN VIU S'HA REINICIAT des del OnePlus (pendent de vistiplau de
+#    Tomeu): els canvis estan al codi i verificats amb BD de prova, però el
+#    backend de la demo (:8030) encara corre la versió antiga.
