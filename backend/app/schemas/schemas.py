@@ -410,6 +410,10 @@ class StaffSyncCreate(BaseModel):
     phone: Optional[str] = None
     role: str = "waiter"
     is_active: bool = True
+    #: PIN del treballador (opcional). Si Jornada l'envia, el cambrer pot entrar
+    #: amb el MATEIX PIN a Comanda i a Jornada. Si no, queda sense PIN i la
+    #: identitat arriba pel porter.
+    pin: Optional[str] = None
 
 
 class StaffSyncOut(BaseModel):

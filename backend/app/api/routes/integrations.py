@@ -105,7 +105,9 @@ def sync_staff(payload: StaffSyncCreate, db: Session = Depends(get_db)):
     """Sincronitza un empleat de Jornada amb el Staff de Comanda.
 
     Idempotent per `external_id` + `source='jornada'`. Els Staff sincronitzats
-    NO tenen PIN (la identitat ve de Jornada).
+    NO tenen PIN propi de Comanda quan Jornada n'envia un (la identitat ve de
+    Jornada pel porter); si Jornada l'envia, es desa perquè el cambrer pugui
+    entrar amb el MATEIX PIN a tots dos sistemes.
     """
     existing = (
         db.query(Staff)
@@ -118,6 +120,8 @@ def sync_staff(payload: StaffSyncCreate, db: Session = Depends(get_db)):
         existing.phone = payload.phone
         existing.role = payload.role
         existing.is_active = payload.is_active
+        if payload.pin:
+            existing.pin = payload.pin
         db.commit()
         db.refresh(existing)
         return existing
@@ -127,7 +131,9 @@ def sync_staff(payload: StaffSyncCreate, db: Session = Depends(get_db)):
         email=payload.email,
         phone=payload.phone,
         role=payload.role,
-        pin=None,  # sense PIN: la identitat ve de Jornada
+        # Si Jornada envia el PIN, es desa (mateix PIN als dos sistemes). Si no,
+        # el Staff queda sense PIN i la identitat arriba pel porter de Jornada.
+        pin=payload.pin or None,
         is_active=payload.is_active,
         external_id=payload.external_id,
         source="jornada",
