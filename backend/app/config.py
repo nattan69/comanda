@@ -15,6 +15,21 @@ class Settings(BaseSettings):
     JORNADA_PORTER_SECRET: str = ""
     JORNADA_PORTER_ALGORITHM: str = "HS256"
 
+    # Secret PROPI del porter (decisió Tomeu 18/09/2026): SEPARAT del secret_key
+    # de sessió, perquè canviar un no trenqui l'altre. Si està omplert, mana
+    # aquest; si no, es manté el comportament antic (JORNADA_PORTER_SECRET).
+    COMANDA_PORTER_SECRET: str = ""
+    COMANDA_PORTER_ALGORITHM: str = "HS256"
+
+    @property
+    def porter_secret_efectiu(self) -> str:
+        """Secret que es fa servir per validar el porter (el nou mana si hi és)."""
+        return self.COMANDA_PORTER_SECRET or self.JORNADA_PORTER_SECRET
+
+    @property
+    def porter_algorithm_efectiu(self) -> str:
+        return self.COMANDA_PORTER_ALGORITHM or self.JORNADA_PORTER_ALGORITHM
+
     DEBUG: bool = False
 
     # Integració PMS (room charges cap a Estada o Mews/Cloudbeds...)

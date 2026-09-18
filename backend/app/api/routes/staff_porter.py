@@ -61,12 +61,12 @@ def session_exchange(payload: SessionExchangeRequest, db: Session = Depends(get_
     token = (payload.jornada_token or "").strip()
     if not token:
         raise HTTPException(status_code=400, detail="Falta el jornada_token")
-    if not settings.JORNADA_PORTER_SECRET:
+    if not settings.porter_secret_efectiu:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Porter no configurat: falta JORNADA_PORTER_SECRET al .env "
-                "(ha de coincidir amb el secret de Jornada/Jornals)."
+                "Porter no configurat: falta COMANDA_PORTER_SECRET al .env "
+                "(ha de coincidir amb el de Jornada i Jornals)."
             ),
         )
 
@@ -77,8 +77,8 @@ def session_exchange(payload: SessionExchangeRequest, db: Session = Depends(get_
         try:
             claims = jwt.decode(
                 token,
-                settings.JORNADA_PORTER_SECRET,
-                algorithms=[settings.JORNADA_PORTER_ALGORITHM],
+                settings.porter_secret_efectiu,
+                algorithms=[settings.porter_algorithm_efectiu],
                 audience=AUDIENCE,
                 issuer=iss,
             )
