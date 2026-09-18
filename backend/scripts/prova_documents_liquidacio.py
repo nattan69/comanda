@@ -17,6 +17,9 @@ from pathlib import Path
 
 TMPDB = Path(tempfile.gettempdir()) / f"prova_docs_{uuid.uuid4().hex[:8]}.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{TMPDB}"
+# Desactivam el PMS (Estada no corre dins la prova): el room_charge es valida
+# en local contra RoomCredit, sense intentar postar a localhost:8001 (timeout).
+os.environ["PMS_PROVIDER"] = ""
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient  # noqa: E402
