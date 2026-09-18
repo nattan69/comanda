@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from ...db import get_db
-from ...models.models import Reservation, Staff, Center, FichajeEvent, Shift
+from ...models.models import Reservation, Staff, Center, Establishment, FichajeEvent, Shift
 from ...schemas.schemas import (
     ReservationCreate,
     ReservationOut,
@@ -12,6 +12,8 @@ from ...schemas.schemas import (
     StaffSyncOut,
     CenterSyncCreate,
     CenterSyncOut,
+    EstablishmentSyncCreate,
+    EstablishmentSyncOut,
     FichajeCreate,
     FichajeOut,
     ShiftSummary,
@@ -146,6 +148,58 @@ def sync_staff(payload: StaffSyncCreate, db: Session = Depends(get_db)):
 
 
 @router.post(
+    "/establishments-sync",
+    response_model=EstablishmentSyncOut,
+    dependencies=[Depends(_check_api_key)],
+)
+def sync_establishment(payload: EstablishmentSyncCreate, db: Session = Depends(get_db)):
+    """Sincronitza una empresa de Jornada amb l'Establishment de Comanda.
+
+    Idempotent per `external_id` + `source='jornada'`.
+    """
+    existing = (
+        db.query(Establishment)
+        .filter(Establishment.external_id == payload.external_id, Establishment.source == "jornada")
+        .first()
+    )
+    if existing:
+        existing.name = payload.name
+        existing.legal_name = payload.legal_name
+        existing.nif = payload.nif
+        existing.category = payload.category
+        existing.address = payload.address
+        existing.city = payload.city
+        existing.province = payload.province
+        existing.postal_code = payload.postal_code
+        existing.phone = payload.phone
+        existing.email = payload.email
+        existing.active = payload.active
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    establishment = Establishment(
+        name=payload.name,
+        legal_name=payload.legal_name,
+        nif=payload.nif,
+        category=payload.category,
+        address=payload.address,
+        city=payload.city,
+        province=payload.province,
+        postal_code=payload.postal_code,
+        phone=payload.phone,
+        email=payload.email,
+        active=payload.active,
+        external_id=payload.external_id,
+        source="jornada",
+    )
+    db.add(establishment)
+    db.commit()
+    db.refresh(establishment)
+    return establishment
+
+
+@router.post(
     "/centers-sync",
     response_model=CenterSyncOut,
     dependencies=[Depends(_check_api_key)],
@@ -153,8 +207,23 @@ def sync_staff(payload: StaffSyncCreate, db: Session = Depends(get_db)):
 def sync_center(payload: CenterSyncCreate, db: Session = Depends(get_db)):
     """Sincronitza un centre (punt de venda) de Jornada amb Comanda.
 
-    Idempotent per `external_id` + `source='jornada'`.
+    Idempotent per `external_id` + `source='jornada'`. L'establiment es resol
+    per `establishment_external_id` (empresa_id de Jornada).
     """
+    establishment = (
+        db.query(Establishment)
+        .filter(
+            Establishment.external_id == payload.establishment_external_id,
+            Establishment.source == "jornada",
+        )
+        .first()
+    )
+    if not establishment:
+        raise HTTPException(
+            status_code=404,
+            detail="Establiment no trobat: sincronitza abans l'empresa via /establishments-sync",
+        )
+
     existing = (
         db.query(Center)
         .filter(Center.external_id == payload.external_id, Center.source == "jornada")
@@ -162,14 +231,14 @@ def sync_center(payload: CenterSyncCreate, db: Session = Depends(get_db)):
     )
     if existing:
         existing.name = payload.name
-        existing.establishment_id = payload.establishment_id
+        existing.establishment_id = establishment.id
         db.commit()
         db.refresh(existing)
         return existing
 
     center = Center(
         name=payload.name,
-        establishment_id=payload.establishment_id,
+        establishment_id=establishment.id,
         external_id=payload.external_id,
         source="jornada",
     )

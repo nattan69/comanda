@@ -365,6 +365,9 @@ class Establishment(Base):
     phone = Column(String)
     email = Column(String)
     active = Column(Boolean, default=True, nullable=False)
+    # --- Integració amb Jornada ---
+    external_id = Column(String, index=True)  # empresa_id a Jornada
+    source = Column(String, default='manual')  # manual, jornada
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

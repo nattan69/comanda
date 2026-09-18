@@ -433,7 +433,9 @@ class StaffSyncOut(BaseModel):
 class CenterSyncCreate(BaseModel):
     external_id: str
     name: str
-    establishment_id: UUID
+    # Referència a l'establiment per `external_id` (empresa_id de Jornada).
+    # L'establiment s'ha de sincronitzar abans via /establishments-sync.
+    establishment_external_id: str
 
 
 class CenterSyncOut(BaseModel):
@@ -444,6 +446,39 @@ class CenterSyncOut(BaseModel):
     external_id: Optional[str] = None
     source: str = "manual"
     active: bool
+
+
+class EstablishmentSyncCreate(BaseModel):
+    external_id: str
+    name: str
+    legal_name: Optional[str] = None
+    nif: Optional[str] = None
+    category: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    province: Optional[str] = None
+    postal_code: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    active: bool = True
+
+
+class EstablishmentSyncOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    legal_name: Optional[str] = None
+    nif: Optional[str] = None
+    category: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    province: Optional[str] = None
+    postal_code: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    active: bool
+    external_id: Optional[str] = None
+    source: str = "manual"
 
 
 class FichajeCreate(BaseModel):
